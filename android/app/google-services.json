@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "370837552928",
+    "project_id": "wurkit-26a9c",
+    "storage_bucket": "wurkit-26a9c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:370837552928:android:a8a9359b214a4c245d2145",
+        "android_client_info": {
+          "package_name": "com.ahmad.wurkit.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmV0820jX7zakHKKDwSC-BdY0KlefBgsk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:370837552928:android:f9ea639f890c3c415d2145",
+        "android_client_info": {
+          "package_name": "com.example.wurkit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmV0820jX7zakHKKDwSC-BdY0KlefBgsk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
