@@ -12,7 +12,20 @@
           "package_name": "com.ahmad.wurkit.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "370837552928-inq6lrdjjiafadlts62qh0eghn8eifh0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ahmad.wurkit.app",
+            "certificate_hash": "3c7d7d9f67f7ff0fd9ee87b9a496518da51180a5"
+          }
+        },
+        {
+          "client_id": "370837552928-atrj0s8h34l9bkhe268ossb4tn46sorv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAmV0820jX7zakHKKDwSC-BdY0KlefBgsk"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "370837552928-atrj0s8h34l9bkhe268ossb4tn46sorv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "370837552928-cm39gku63ltfn40h3tlfobrct12b2l3r.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.wurkit"
+              }
+            }
+          ]
         }
       }
     },
@@ -31,7 +56,20 @@
           "package_name": "com.example.wurkit"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "370837552928-92oc7mh32gqf836o34m78l5hui4pn1h0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.wurkit",
+            "certificate_hash": "3c7d7d9f67f7ff0fd9ee87b9a496518da51180a5"
+          }
+        },
+        {
+          "client_id": "370837552928-atrj0s8h34l9bkhe268ossb4tn46sorv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAmV0820jX7zakHKKDwSC-BdY0KlefBgsk"
@@ -39,7 +77,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "370837552928-atrj0s8h34l9bkhe268ossb4tn46sorv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "370837552928-cm39gku63ltfn40h3tlfobrct12b2l3r.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.wurkit"
+              }
+            }
+          ]
         }
       }
     }
