@@ -9,6 +9,10 @@ enum PostLoginNavigationState {
   employeeWorkPreferences,
   employeeAvailabilityLocation,
   employeeExperienceSummary,
+  employerBusinessInfo,
+  employerBusinessLocation,
+  employerHiringPreferences,
+  employerProfileSummary,
 }
 
 class AuthService {
@@ -268,7 +272,28 @@ class AuthService {
       return PostLoginNavigationState.employeeExperienceSummary;
     }
 
-    return PostLoginNavigationState.completed;
+    if (role == 'employer') {
+      final onboardingStep = data?['onboardingStep'] as String?;
+
+      if (onboardingStep == null || onboardingStep.isEmpty) {
+        return PostLoginNavigationState.employerBusinessInfo;
+      }
+
+      switch (onboardingStep) {
+        case 'business_info':
+          return PostLoginNavigationState.employerBusinessLocation;
+        case 'business_location':
+          return PostLoginNavigationState.employerHiringPreferences;
+        case 'hiring_preferences':
+          return PostLoginNavigationState.employerProfileSummary;
+        case 'completed':
+          return PostLoginNavigationState.completed;
+        default:
+          return PostLoginNavigationState.employerBusinessInfo;
+      }
+    }
+
+    return PostLoginNavigationState.chooseRole;
   }
 
   /// Send email verification to the current user
