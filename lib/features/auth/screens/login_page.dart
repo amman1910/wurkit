@@ -8,6 +8,10 @@ import '../../employee_profile/screens/employee_basic_info_page.dart';
 import '../../employee_profile/screens/employee_work_preferences_page.dart';
 import '../../employee_profile/screens/employee_availability_location_page.dart';
 import '../../employee_profile/screens/employee_experience_summary_page.dart';
+import '../../employer_profile/screens/employer_business_info_page.dart';
+import '../../employer_profile/screens/employer_business_location_page.dart';
+import '../../employer_profile/screens/employer_hiring_preferences_page.dart';
+import '../../employer_profile/screens/employer_profile_summary_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -26,6 +30,89 @@ class _LoginPageState extends State<LoginPage> {
     _authService = AuthService();
   }
 
+  Future<void> _navigateAfterLogin(PostLoginNavigationState routeState) async {
+    if (!mounted) return;
+
+    if (routeState == PostLoginNavigationState.chooseRole) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const ChooseProfilePage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.employeeBasicInfo) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmployeeBasicInfoPage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.employeeWorkPreferences) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmployeeWorkPreferencesPage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.employeeAvailabilityLocation) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmployeeAvailabilityLocationPage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.employeeExperienceSummary) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmployeeExperienceSummaryPage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.employerBusinessInfo) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmployerBusinessInfoPage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.employerBusinessLocation) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmployerBusinessLocationPage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.employerHiringPreferences) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmployerHiringPreferencesPage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.employerProfileSummary) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmployerProfileSummaryPage(),
+        ),
+      );
+    } else if (routeState == PostLoginNavigationState.completed) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const TemporaryHomeComingSoonPage(),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Signed in successfully with Google'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleGoogleSignIn() async {
     if (_isLoading) return;
 
@@ -36,60 +123,7 @@ class _LoginPageState extends State<LoginPage> {
 
       if (credential != null && mounted) {
         final routeState = await _authService.getPostLoginNavigationState();
-
-        if (routeState == PostLoginNavigationState.chooseRole) {
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ChooseProfilePage(),
-              ),
-            );
-          }
-        } else if (routeState == PostLoginNavigationState.employeeBasicInfo) {
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const EmployeeBasicInfoPage(),
-              ),
-            );
-          }
-        } else if (routeState == PostLoginNavigationState.employeeWorkPreferences) {
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const EmployeeWorkPreferencesPage(),
-              ),
-            );
-          }
-        } else if (routeState == PostLoginNavigationState.employeeAvailabilityLocation) {
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const EmployeeAvailabilityLocationPage(),
-              ),
-            );
-          }
-        } else if (routeState == PostLoginNavigationState.employeeExperienceSummary) {
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const EmployeeExperienceSummaryPage(),
-              ),
-            );
-          }
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Signed in successfully with Google'),
-              duration: Duration(seconds: 1),
-            ),
-          );
-        }
+        await _navigateAfterLogin(routeState);
       }
     } catch (e) {
       if (mounted) {
@@ -246,6 +280,64 @@ class _LoginPageState extends State<LoginPage> {
 
               const Spacer(flex: 1),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class TemporaryHomeComingSoonPage extends StatelessWidget {
+  const TemporaryHomeComingSoonPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.navyBg,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.horizontal,
+            vertical: AppSpacing.vertical,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/images/wurkit_logo.png',
+                  height: 92,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 28),
+                Text(
+                  'Welcome back',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.heading(
+                    color: AppColors.coralAccent,
+                    fontSize: 34,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Your home screen is still under development and will be ready soon.',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.lightText,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Profile completed successfully.',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.label.copyWith(
+                    color: AppColors.white,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
