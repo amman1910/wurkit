@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import 'login_page.dart';
 import 'welcome_page.dart';
 import '../../employee_profile/screens/employee_basic_info_page.dart';
+import '../../employer_profile/screens/employer_business_info_page.dart';
 
 class ChooseProfilePage extends StatefulWidget {
   const ChooseProfilePage({super.key});
@@ -43,6 +44,13 @@ class _ChooseProfilePageState extends State<ChooseProfilePage> {
           context,
           MaterialPageRoute(
             builder: (context) => const EmployeeBasicInfoPage(),
+          ),
+        );
+      } else if (role == 'employer') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const EmployerBusinessInfoPage(),
           ),
         );
       }
