@@ -218,6 +218,17 @@ class AuthService {
     return await _firestore.collection('users').doc(user.uid).get();
   }
 
+  Future<String?> getCurrentUserRole() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('No authenticated user found');
+    }
+
+    final doc = await _firestore.collection('users').doc(user.uid).get();
+    final data = doc.data();
+    return data?['role'] as String?;
+  }
+
   /// Determine the next navigation state after login
   Future<PostLoginNavigationState> getPostLoginNavigationState() async {
     final user = _auth.currentUser;
