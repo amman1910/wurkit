@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../employer_home/screens/employer_main_navigation_page.dart';
 import '../services/employer_profile_service.dart';
 
 class EmployerProfileSummaryPage extends StatefulWidget {
@@ -107,11 +108,12 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
-          builder: (_) => const EmployerOnboardingCompletePage(),
+          builder: (_) => const EmployerMainNavigationPage(),
         ),
+        (route) => false,
       );
     } catch (e) {
       if (mounted) {
@@ -544,73 +546,6 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
               _buildProfileContent(),
               const SizedBox(height: 20),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class EmployerOnboardingCompletePage extends StatelessWidget {
-  const EmployerOnboardingCompletePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.navyBg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.horizontal,
-            vertical: AppSpacing.vertical,
-          ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Image.asset(
-                  'assets/images/wurkit_logo.png',
-                  height: 92,
-                ),
-                const SizedBox(height: 28),
-                Text(
-                  'Business profile completed',
-                  style: GoogleFonts.nunito(
-                    color: AppColors.coralAccent,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Your employer profile is ready. Next step: creating job posts.',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.lightText,
-                    fontSize: 16,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: AppSpacing.buttonHeight,
-                  child: ElevatedButton(
-                    onPressed: null,
-                    style: AppButtonStyles.primary(
-                      backgroundColor: AppColors.coralAccent,
-                      foregroundColor: AppColors.navyBg,
-                      disabledBackgroundColor: AppColors.coralAccent.withOpacity(0.35),
-                    ),
-                    child: Text(
-                      'Go to dashboard soon',
-                      style: AppTextStyles.buttonLabel(color: AppColors.navyBg),
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_ui.dart';
+import '../../employee_home/screens/employee_main_navigation_page.dart';
 import '../services/employee_profile_service.dart';
 
 class _ExperienceItem {
@@ -165,12 +166,12 @@ class _EmployeeExperienceSummaryPageState extends State<EmployeeExperienceSummar
       );
 
       if (mounted) {
-        // Navigate to completion screen
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(
-            builder: (_) => const EmployeeOnboardingCompletePage(),
+            builder: (_) => const EmployeeMainNavigationPage(),
           ),
+          (route) => false,
         );
       }
     } catch (e) {
@@ -741,74 +742,6 @@ class _EmployeeExperienceSummaryPageState extends State<EmployeeExperienceSummar
 
               const SizedBox(height: 30),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class EmployeeOnboardingCompletePage extends StatelessWidget {
-  const EmployeeOnboardingCompletePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.coralAccent,
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Logo
-                Image.asset(
-                  'assets/images/wurkit_logo_navy.png',
-                  height: 80,
-                ),
-                const SizedBox(height: 32),
-                // Success Message
-                Text(
-                  'Profile completed\nsuccessfully',
-                  style: GoogleFonts.nunito(
-                    color: AppColors.navyBg,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                // Subtitle
-                Text(
-                  'Home screen will be connected later',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.navyBg.withValues(alpha: 0.7),
-                    fontSize: 16,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 48),
-                // OK Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.navyBg,
-                      shape: const StadiumBorder(),
-                    ),
-                    child: Text(
-                      'OK',
-                      style: AppTextStyles.buttonLabel(color: AppColors.coralAccent),
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
