@@ -50,7 +50,7 @@ class JobService {
   }
 
   /// Stream of open jobs sorted by createdAt descending
-  Stream<QuerySnapshot> getOpenJobs() {
+  Stream<QuerySnapshot<Map<String, dynamic>>> getOpenJobs() {
     return _firestore
         .collection('jobs')
         .where('status', isEqualTo: 'open')

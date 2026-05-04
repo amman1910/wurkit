@@ -1,48 +1,26 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../services/job_service.dart';
+import '../widgets/job_card.dart';
 
-class EmployeeJobsPage extends StatelessWidget {
+class EmployeeJobsPage extends StatefulWidget {
   const EmployeeJobsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const _EmployeePlaceholderScaffold(
-      title: 'Jobs',
-      subtitle: 'Browse available short-term jobs near you.',
-      message: 'Job feed coming soon',
-      icon: Icons.work_outline_rounded,
-      bullets: [
-        'Search jobs',
-        'Filter by distance',
-        'Apply with one tap',
-        'View job details',
-      ],
-    );
-  }
+  State<EmployeeJobsPage> createState() => _EmployeeJobsPageState();
 }
 
-class _EmployeePlaceholderScaffold extends StatelessWidget {
-  const _EmployeePlaceholderScaffold({
-    required this.title,
-    required this.subtitle,
-    required this.message,
-    required this.icon,
-    required this.bullets,
-  });
-
-  final String title;
-  final String subtitle;
-  final String message;
-  final IconData icon;
-  final List<String> bullets;
+class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
+  final JobService _jobService = JobService();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.navyBg,
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.horizontal,
             vertical: AppSpacing.vertical,
@@ -50,73 +28,153 @@ class _EmployeePlaceholderScaffold extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
+              const Text(
+                'Jobs',
+                style: TextStyle(
                   color: AppColors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
-              Text(subtitle, style: AppTextStyles.body),
+              const Text(
+                'Browse available short-term jobs near you.',
+                style: AppTextStyles.body,
+              ),
               const SizedBox(height: 24),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: AppColors.coralAccent.withOpacity(0.16),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(icon, color: AppColors.coralAccent),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      message,
-                      style: const TextStyle(
-                        color: AppColors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'We\'re setting up the employee experience so this space can become your main work dashboard.',
-                      style: AppTextStyles.body,
-                    ),
-                    const SizedBox(height: 20),
-                    ...bullets.map(
-                      (bullet) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.check_circle_outline_rounded,
-                              color: AppColors.coralAccent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(bullet, style: AppTextStyles.label),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+              Expanded(
+                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _jobService.getOpenJobs(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return _JobErrorView(error: snapshot.error.toString());
+                    }
+
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const _JobLoadingView();
+                    }
+
+                    final jobs = snapshot.data?.docs ?? [];
+                    if (jobs.isEmpty) {
+                      return const _JobEmptyView();
+                    }
+
+                    return ListView.separated(
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: jobs.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 16),
+                      itemBuilder: (context, index) {
+                        final job = jobs[index].data();
+                        return JobCard(job: job);
+                      },
+                    );
+                  },
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JobLoadingView extends StatelessWidget {
+  const _JobLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 96,
+        height: 96,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.coralAccent),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JobEmptyView extends StatelessWidget {
+  const _JobEmptyView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: const [
+            Text(
+              'No jobs available',
+              style: TextStyle(
+                color: AppColors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'There are no open jobs available at the moment.',
+              style: AppTextStyles.body,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _JobErrorView extends StatelessWidget {
+  const _JobErrorView({required this.error});
+
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 18),
+            const Text(
+              'Failed to load jobs',
+              style: TextStyle(
+                color: AppColors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(error, style: AppTextStyles.body, textAlign: TextAlign.center),
+          ],
         ),
       ),
     );
