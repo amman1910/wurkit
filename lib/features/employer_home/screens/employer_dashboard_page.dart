@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../jobs/screens/post_job_screen.dart';
 
 class EmployerDashboardPage extends StatelessWidget {
   const EmployerDashboardPage({super.key});
-
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Job posting coming soon')));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +81,14 @@ class EmployerDashboardPage extends StatelessWidget {
                     SizedBox(
                       height: AppSpacing.buttonHeight,
                       child: ElevatedButton(
-                        onPressed: () => _showComingSoon(context),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PostJobScreen(),
+                            ),
+                          );
+                        },
                         style: AppButtonStyles.primary(
                           foregroundColor: AppColors.navyBg,
                         ),
