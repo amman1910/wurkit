@@ -10,7 +10,8 @@ class EmployeeApplicationsPage extends StatefulWidget {
   const EmployeeApplicationsPage({super.key});
 
   @override
-  State<EmployeeApplicationsPage> createState() => _EmployeeApplicationsPageState();
+  State<EmployeeApplicationsPage> createState() =>
+      _EmployeeApplicationsPageState();
 }
 
 class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
@@ -36,7 +37,9 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
         body: SafeArea(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.horizontal),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.horizontal,
+              ),
               child: Text(
                 'Please sign in to view your applications.',
                 style: AppTextStyles.body,
@@ -85,10 +88,14 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
               const SizedBox(height: 24),
               Expanded(
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: _applicationService.getEmployeeApplications(currentUser.uid),
+                  stream: _applicationService.getEmployeeApplications(
+                    currentUser.uid,
+                  ),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
-                      return _ApplicationsErrorView(error: snapshot.error.toString());
+                      return _ApplicationsErrorView(
+                        error: snapshot.error.toString(),
+                      );
                     }
 
                     if (snapshot.connectionState == ConnectionState.waiting) {
@@ -106,10 +113,14 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
                       separatorBuilder: (_, __) => const SizedBox(height: 16),
                       itemBuilder: (context, index) {
                         final application = applications[index].data();
-                        final status = application['status'] as String? ?? 'pending';
-                        final createdAt = application['createdAt'] as Timestamp?;
+                        final status =
+                            application['status'] as String? ?? 'pending';
+                        final createdAt =
+                            application['createdAt'] as Timestamp?;
                         final createdAtString = createdAt != null
-                            ? DateFormat('yyyy-MM-dd – HH:mm').format(createdAt.toDate())
+                            ? DateFormat(
+                                'yyyy-MM-dd – HH:mm',
+                              ).format(createdAt.toDate())
                             : 'Unknown date';
 
                         return Container(
@@ -124,11 +135,13 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      application['jobTitle'] as String? ?? 'Job',
+                                      application['jobTitle'] as String? ??
+                                          'Job',
                                       style: const TextStyle(
                                         color: AppColors.white,
                                         fontSize: 18,
@@ -142,7 +155,9 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: _statusColor(status).withOpacity(0.16),
+                                      color: _statusColor(
+                                        status,
+                                      ).withOpacity(0.16),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -157,7 +172,8 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                application['message'] as String? ?? 'No message provided.',
+                                application['message'] as String? ??
+                                    'No message provided.',
                                 style: AppTextStyles.body,
                               ),
                               const SizedBox(height: 12),

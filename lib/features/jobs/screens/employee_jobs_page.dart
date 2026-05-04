@@ -90,9 +90,7 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, controller.text.trim()),
-              style: AppButtonStyles.primary(
-                foregroundColor: AppColors.navyBg,
-              ),
+              style: AppButtonStyles.primary(foregroundColor: AppColors.navyBg),
               child: const Text('Send application'),
             ),
           ],
@@ -106,10 +104,7 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.grey.shade900,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.grey.shade900),
     );
   }
 
@@ -122,7 +117,9 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
         body: SafeArea(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.horizontal),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.horizontal,
+              ),
               child: Text(
                 'Please sign in to view and apply for jobs.',
                 style: AppTextStyles.body,
@@ -167,7 +164,8 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
                       return _JobErrorView(error: jobSnapshot.error.toString());
                     }
 
-                    if (jobSnapshot.connectionState == ConnectionState.waiting) {
+                    if (jobSnapshot.connectionState ==
+                        ConnectionState.waiting) {
                       return const _JobLoadingView();
                     }
 
@@ -177,7 +175,9 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
                     }
 
                     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: _applicationService.getEmployeeApplications(currentUser.uid),
+                      stream: _applicationService.getEmployeeApplications(
+                        currentUser.uid,
+                      ),
                       builder: (context, applicationSnapshot) {
                         if (applicationSnapshot.hasError) {
                           return _JobErrorView(
@@ -185,12 +185,16 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
                           );
                         }
 
-                        if (applicationSnapshot.connectionState == ConnectionState.waiting) {
+                        if (applicationSnapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return const _JobLoadingView();
                         }
 
-                        final appliedJobIds = applicationSnapshot.data?.docs
-                                .map((doc) => doc.data()['jobId'] as String? ?? '')
+                        final appliedJobIds =
+                            applicationSnapshot.data?.docs
+                                .map(
+                                  (doc) => doc.data()['jobId'] as String? ?? '',
+                                )
                                 .where((id) => id.isNotEmpty)
                                 .toSet() ??
                             {};
@@ -198,12 +202,17 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
                         return ListView.separated(
                           physics: const BouncingScrollPhysics(),
                           itemCount: jobs.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 16),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 16),
                           itemBuilder: (context, index) {
                             final job = jobs[index].data();
                             final jobId = jobs[index].id;
-                            final alreadyApplied = appliedJobIds.contains(jobId);
-                            final isSubmitting = _submittingJobs.contains(jobId);
+                            final alreadyApplied = appliedJobIds.contains(
+                              jobId,
+                            );
+                            final isSubmitting = _submittingJobs.contains(
+                              jobId,
+                            );
 
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -216,7 +225,10 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
                                   child: ElevatedButton(
                                     onPressed: alreadyApplied || isSubmitting
                                         ? null
-                                        : () => _applyToJob({...job, 'jobId': jobId}),
+                                        : () => _applyToJob({
+                                            ...job,
+                                            'jobId': jobId,
+                                          }),
                                     style: AppButtonStyles.primary(
                                       foregroundColor: AppColors.navyBg,
                                       disabledBackgroundColor:
@@ -228,13 +240,16 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
                                             height: 24,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2.5,
-                                              valueColor: AlwaysStoppedAnimation<Color>(
-                                                AppColors.navyBg,
-                                              ),
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    AppColors.navyBg,
+                                                  ),
                                             ),
                                           )
                                         : Text(
-                                            alreadyApplied ? 'Applied' : 'Apply',
+                                            alreadyApplied
+                                                ? 'Applied'
+                                                : 'Apply',
                                             style: AppTextStyles.buttonLabel(
                                               color: AppColors.navyBg,
                                             ),

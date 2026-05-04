@@ -2,17 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ApplicationService {
-  ApplicationService({
-    FirebaseAuth? firebaseAuth,
-    FirebaseFirestore? firestore,
-  })  : _auth = firebaseAuth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+  ApplicationService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
+    : _auth = firebaseAuth ?? FirebaseAuth.instance,
+      _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
   Future<String> _resolveEmployeeName(String employeeId) async {
-    final profileDoc = await _firestore.collection('employeeProfiles').doc(employeeId).get();
+    final profileDoc = await _firestore
+        .collection('employeeProfiles')
+        .doc(employeeId)
+        .get();
     final profileData = profileDoc.data();
     final profileName = profileData?['name'] as String?;
 
@@ -30,7 +31,9 @@ class ApplicationService {
     required String jobId,
     required String employeeId,
   }) async {
-    print('DEBUG: Running hasApplied query: applications.where(jobId=$jobId, employeeId=$employeeId).limit(1).get()');
+    print(
+      'DEBUG: Running hasApplied query: applications.where(jobId=$jobId, employeeId=$employeeId).limit(1).get()',
+    );
     final query = await _firestore
         .collection('applications')
         .where('jobId', isEqualTo: jobId)
@@ -55,7 +58,8 @@ class ApplicationService {
     }
 
     final applicantId = employeeId ?? currentUser!.uid;
-    final applicantName = employeeName ?? await _resolveEmployeeName(applicantId);
+    final applicantName =
+        employeeName ?? await _resolveEmployeeName(applicantId);
 
     if (await hasApplied(jobId: jobId, employeeId: applicantId)) {
       throw Exception('You already applied to this job');
@@ -90,8 +94,11 @@ class ApplicationService {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> getEmployeeApplications(
-      String employeeId) {
-    print('DEBUG: Running getEmployeeApplications query: applications.where(employeeId=$employeeId).orderBy(createdAt DESC).snapshots()');
+    String employeeId,
+  ) {
+    print(
+      'DEBUG: Running getEmployeeApplications query: applications.where(employeeId=$employeeId).orderBy(createdAt DESC).snapshots()',
+    );
     return _firestore
         .collection('applications')
         .where('employeeId', isEqualTo: employeeId)
@@ -100,8 +107,11 @@ class ApplicationService {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> getApplicationsForEmployer(
-      String employerId) {
-    print('DEBUG: Running getApplicationsForEmployer query: applications.where(employerId=$employerId).orderBy(createdAt DESC).snapshots()');
+    String employerId,
+  ) {
+    print(
+      'DEBUG: Running getApplicationsForEmployer query: applications.where(employerId=$employerId).orderBy(createdAt DESC).snapshots()',
+    );
     return _firestore
         .collection('applications')
         .where('employerId', isEqualTo: employerId)
@@ -123,7 +133,9 @@ class ApplicationService {
       throw Exception('Invalid application status');
     }
 
-    final applicationRef = _firestore.collection('applications').doc(applicationId);
+    final applicationRef = _firestore
+        .collection('applications')
+        .doc(applicationId);
     final applicationDoc = await applicationRef.get();
 
     if (!applicationDoc.exists) {

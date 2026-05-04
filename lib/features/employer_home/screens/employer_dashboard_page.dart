@@ -129,7 +129,8 @@ class EmployerDashboardPage extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const EmployerApplicationsPage(),
+                              builder: (context) =>
+                                  const EmployerApplicationsPage(),
                             ),
                           );
                         },

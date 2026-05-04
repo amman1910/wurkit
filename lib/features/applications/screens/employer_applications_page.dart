@@ -10,7 +10,8 @@ class EmployerApplicationsPage extends StatefulWidget {
   const EmployerApplicationsPage({super.key});
 
   @override
-  State<EmployerApplicationsPage> createState() => _EmployerApplicationsPageState();
+  State<EmployerApplicationsPage> createState() =>
+      _EmployerApplicationsPageState();
 }
 
 class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
@@ -73,7 +74,9 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
         body: SafeArea(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.horizontal),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.horizontal,
+              ),
               child: Text(
                 'Please sign in to view applications.',
                 style: AppTextStyles.body,
@@ -122,10 +125,14 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
               const SizedBox(height: 24),
               Expanded(
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: _applicationService.getApplicationsForEmployer(currentUser.uid),
+                  stream: _applicationService.getApplicationsForEmployer(
+                    currentUser.uid,
+                  ),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
-                      return _ApplicationsErrorView(error: snapshot.error.toString());
+                      return _ApplicationsErrorView(
+                        error: snapshot.error.toString(),
+                      );
                     }
 
                     if (snapshot.connectionState == ConnectionState.waiting) {
@@ -144,12 +151,18 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                       itemBuilder: (context, index) {
                         final application = applications[index].data();
                         final applicationId = applications[index].id;
-                        final status = application['status'] as String? ?? 'pending';
-                        final createdAt = application['createdAt'] as Timestamp?;
+                        final status =
+                            application['status'] as String? ?? 'pending';
+                        final createdAt =
+                            application['createdAt'] as Timestamp?;
                         final createdAtString = createdAt != null
-                            ? DateFormat('yyyy-MM-dd – HH:mm').format(createdAt.toDate())
+                            ? DateFormat(
+                                'yyyy-MM-dd – HH:mm',
+                              ).format(createdAt.toDate())
                             : 'Unknown date';
-                        final isProcessing = _processingIds.contains(applicationId);
+                        final isProcessing = _processingIds.contains(
+                          applicationId,
+                        );
 
                         return Container(
                           width: double.infinity,
@@ -163,11 +176,13 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      application['jobTitle'] as String? ?? 'Job title',
+                                      application['jobTitle'] as String? ??
+                                          'Job title',
                                       style: const TextStyle(
                                         color: AppColors.white,
                                         fontSize: 18,
@@ -181,7 +196,9 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: _statusColor(status).withOpacity(0.16),
+                                      color: _statusColor(
+                                        status,
+                                      ).withOpacity(0.16),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -201,7 +218,8 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                application['message'] as String? ?? 'No message provided.',
+                                application['message'] as String? ??
+                                    'No message provided.',
                                 style: AppTextStyles.body,
                               ),
                               const SizedBox(height: 12),
@@ -214,13 +232,18 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton(
-                                      onPressed: isProcessing || status == 'approved'
+                                      onPressed:
+                                          isProcessing || status == 'approved'
                                           ? null
-                                          : () => _changeStatus(applicationId, 'approved'),
+                                          : () => _changeStatus(
+                                              applicationId,
+                                              'approved',
+                                            ),
                                       style: AppButtonStyles.secondaryOutline(
                                         borderColor: Colors.green.shade300,
                                       ),
-                                      child: isProcessing && status != 'rejected'
+                                      child:
+                                          isProcessing && status != 'rejected'
                                           ? const SizedBox(
                                               height: 18,
                                               width: 18,
@@ -234,13 +257,18 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: OutlinedButton(
-                                      onPressed: isProcessing || status == 'rejected'
+                                      onPressed:
+                                          isProcessing || status == 'rejected'
                                           ? null
-                                          : () => _changeStatus(applicationId, 'rejected'),
+                                          : () => _changeStatus(
+                                              applicationId,
+                                              'rejected',
+                                            ),
                                       style: AppButtonStyles.secondaryOutline(
                                         borderColor: Colors.red.shade300,
                                       ),
-                                      child: isProcessing && status != 'approved'
+                                      child:
+                                          isProcessing && status != 'approved'
                                           ? const SizedBox(
                                               height: 18,
                                               width: 18,
@@ -260,7 +288,9 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                                   onPressed: () {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
-                                        content: Text('Chat feature will be implemented next'),
+                                        content: Text(
+                                          'Chat feature will be implemented next',
+                                        ),
                                       ),
                                     );
                                   },
