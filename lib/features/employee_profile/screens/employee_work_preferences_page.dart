@@ -5,7 +5,9 @@ import '../services/employee_profile_service.dart';
 import 'employee_availability_location_page.dart';
 
 class EmployeeWorkPreferencesPage extends StatefulWidget {
-  const EmployeeWorkPreferencesPage({super.key});
+  final bool isEditing;
+
+  const EmployeeWorkPreferencesPage({super.key, this.isEditing = false});
 
   @override
   State<EmployeeWorkPreferencesPage> createState() => _EmployeeWorkPreferencesPageState();
@@ -23,6 +25,7 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
   double salary = 40;
   List<String> selectedJobTypes = [];
   bool isLoading = false;
+  bool isPreloading = true;
 
   // Other options state
   bool isOtherCategorySelected = false;
@@ -38,14 +41,311 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
 
   // Data models
   static const Map<String, List<String>> rolesByCategory = {
-    'Restaurant': ['Waiter', 'Barista', 'Kitchen Assistant', 'Host', 'Dishwasher'],
-    'Retail': ['Cashier', 'Sales Associate', 'Stock Clerk', 'Customer Service'],
-    'Warehouse': ['Picker', 'Loader', 'Forklift Operator', 'Inventory Clerk'],
-    'Office': ['Administrative Assistant', 'Data Entry', 'Receptionist'],
-    'Healthcare': ['Medical Assistant', 'Home Health Aide', 'Pharmacy Tech'],
-    'Hospitality': ['Housekeeper', 'Concierge', 'Event Staff'],
-    'Delivery': ['Driver', 'Courier', 'Package Handler'],
-    'Construction': ['Laborer', 'Helper', 'Site Assistant'],
+    'Restaurant & Food Service': [
+      'Waiter',
+      'Barista',
+      'Kitchen Assistant',
+      'Host',
+      'Dishwasher',
+      'Food Runner',
+      'Bartender',
+      'Cook Helper',
+      'Catering Staff',
+    ],
+    'Retail & Stores': [
+      'Cashier',
+      'Sales Associate',
+      'Stock Clerk',
+      'Customer Service',
+      'Shelf Organizer',
+      'Store Assistant',
+      'Inventory Assistant',
+      'Gift Wrapper',
+    ],
+    'Events': [
+      'Event Staff',
+      'Usher',
+      'Ticket Checker',
+      'Setup Crew',
+      'Cleanup Crew',
+      'Promoter',
+      'Brand Ambassador',
+      'Security Assistant',
+      'Catering Assistant',
+    ],
+    'Warehouse & Logistics': [
+      'Picker',
+      'Packer',
+      'Loader',
+      'Forklift Operator',
+      'Inventory Clerk',
+      'Sorting Assistant',
+      'Packing Assistant',
+      'Stockroom Assistant',
+    ],
+    'Delivery & Driving': [
+      'Driver',
+      'Courier',
+      'Package Handler',
+      'Food Delivery',
+      'Grocery Delivery',
+      'Moving Helper',
+      'Errand Runner',
+    ],
+    'Cleaning & Maintenance': [
+      'Cleaner',
+      'House Cleaner',
+      'Office Cleaner',
+      'Dishwashing Support',
+      'Laundry Assistant',
+      'Maintenance Helper',
+      'Gardening Assistant',
+      'Window Cleaning',
+    ],
+    'Babysitting & Childcare': [
+      'Babysitter',
+      'Nanny Assistant',
+      'After-school Helper',
+      'Child Activity Helper',
+      'School Pickup Helper',
+      'Homework Helper',
+    ],
+    'Pet Care': [
+      'Dog Walker',
+      'Pet Sitter',
+      'Pet Feeding',
+      'Pet Grooming Assistant',
+      'Dog Daycare Helper',
+    ],
+    'Home Help': [
+      'Home Assistant',
+      'Elderly Companion',
+      'Elderly Assistance',
+      'House Sitting',
+      'Meal Prep Helper',
+      'Shopping Helper',
+      'Organization Helper',
+    ],
+    'Tutoring & Education': [
+      'Private Tutor',
+      'Homework Tutor',
+      'Math Tutor',
+      'English Tutor',
+      'Hebrew Tutor',
+      'Computer Tutor',
+      'Exam Prep Helper',
+    ],
+    'Office & Admin': [
+      'Administrative Assistant',
+      'Data Entry',
+      'Receptionist',
+      'Office Assistant',
+      'Document Scanning',
+      'Filing Assistant',
+      'Call Center Assistant',
+    ],
+    'Customer Service': [
+      'Customer Support',
+      'Front Desk',
+      'Reception Helper',
+      'Phone Support',
+      'Online Chat Support',
+      'Guest Relations',
+    ],
+    'Hospitality & Hotels': [
+      'Housekeeper',
+      'Concierge Assistant',
+      'Hotel Reception Assistant',
+      'Room Service Helper',
+      'Bellhop',
+      'Guest Service Assistant',
+    ],
+    'Healthcare Support': [
+      'Medical Assistant',
+      'Home Health Aide',
+      'Pharmacy Assistant',
+      'Clinic Receptionist',
+      'Patient Support Assistant',
+    ],
+    'Construction & Manual Labor': [
+      'Laborer',
+      'Helper',
+      'Site Assistant',
+      'Painter Helper',
+      'Renovation Helper',
+      'Furniture Assembly Helper',
+      'Moving Assistant',
+    ],
+    'Beauty & Wellness': [
+      'Salon Assistant',
+      'Spa Assistant',
+      'Reception Assistant',
+      'Makeup Assistant',
+      'Fitness Studio Assistant',
+    ],
+    'Marketing & Promotions': [
+      'Promoter',
+      'Flyer Distributor',
+      'Brand Ambassador',
+      'Social Media Helper',
+      'Content Assistant',
+      'Survey Collector',
+    ],
+    'Tech & Digital Help': [
+      'Computer Setup Helper',
+      'Phone Setup Helper',
+      'Basic Tech Support',
+      'Website Content Assistant',
+      'Social Media Assistant',
+      'Photo Upload Assistant',
+    ],
+    'Other': [
+      'General Helper',
+      'Flexible Worker',
+      'Short-notice Helper',
+    ],
+  };
+
+  static const Map<String, IconData> categoryIcons = {
+    'Restaurant & Food Service': Icons.restaurant_rounded,
+    'Retail & Stores': Icons.storefront_rounded,
+    'Events': Icons.celebration_rounded,
+    'Warehouse & Logistics': Icons.warehouse_rounded,
+    'Delivery & Driving': Icons.delivery_dining_rounded,
+    'Cleaning & Maintenance': Icons.cleaning_services_rounded,
+    'Babysitting & Childcare': Icons.child_care_rounded,
+    'Pet Care': Icons.pets_rounded,
+    'Home Help': Icons.home_rounded,
+    'Tutoring & Education': Icons.school_rounded,
+    'Office & Admin': Icons.business_center_rounded,
+    'Customer Service': Icons.support_agent_rounded,
+    'Hospitality & Hotels': Icons.hotel_rounded,
+    'Healthcare Support': Icons.local_hospital_rounded,
+    'Construction & Manual Labor': Icons.construction_rounded,
+    'Beauty & Wellness': Icons.spa_rounded,
+    'Marketing & Promotions': Icons.campaign_rounded,
+    'Tech & Digital Help': Icons.computer_rounded,
+    'Other': Icons.more_horiz_rounded,
+    'Restaurant': Icons.restaurant_rounded,
+    'Retail': Icons.storefront_rounded,
+    'Warehouse': Icons.warehouse_rounded,
+    'Office': Icons.business_center_rounded,
+    'Healthcare': Icons.local_hospital_rounded,
+    'Hospitality': Icons.hotel_rounded,
+    'Delivery': Icons.delivery_dining_rounded,
+    'Construction': Icons.construction_rounded,
+  };
+
+  static const Map<String, IconData> roleIcons = {
+    'Waiter': Icons.room_service_rounded,
+    'Barista': Icons.local_cafe_rounded,
+    'Kitchen Assistant': Icons.kitchen_rounded,
+    'Host': Icons.person_pin_rounded,
+    'Dishwasher': Icons.wash_rounded,
+    'Food Runner': Icons.directions_run_rounded,
+    'Bartender': Icons.local_bar_rounded,
+    'Cook Helper': Icons.restaurant_menu_rounded,
+    'Catering Staff': Icons.room_service_rounded,
+    'Cashier': Icons.point_of_sale_rounded,
+    'Sales Associate': Icons.sell_rounded,
+    'Stock Clerk': Icons.inventory_2_rounded,
+    'Customer Service': Icons.support_agent_rounded,
+    'Shelf Organizer': Icons.view_module_rounded,
+    'Store Assistant': Icons.storefront_rounded,
+    'Inventory Assistant': Icons.inventory_rounded,
+    'Gift Wrapper': Icons.card_giftcard_rounded,
+    'Event Staff': Icons.celebration_rounded,
+    'Usher': Icons.event_seat_rounded,
+    'Ticket Checker': Icons.confirmation_number_rounded,
+    'Setup Crew': Icons.build_rounded,
+    'Cleanup Crew': Icons.cleaning_services_rounded,
+    'Promoter': Icons.campaign_rounded,
+    'Brand Ambassador': Icons.record_voice_over_rounded,
+    'Security Assistant': Icons.security_rounded,
+    'Catering Assistant': Icons.room_service_rounded,
+    'Picker': Icons.manage_search_rounded,
+    'Packer': Icons.inventory_2_rounded,
+    'Loader': Icons.local_shipping_rounded,
+    'Forklift Operator': Icons.precision_manufacturing_rounded,
+    'Inventory Clerk': Icons.fact_check_rounded,
+    'Sorting Assistant': Icons.sort_rounded,
+    'Packing Assistant': Icons.inventory_2_rounded,
+    'Stockroom Assistant': Icons.warehouse_rounded,
+    'Driver': Icons.directions_car_rounded,
+    'Courier': Icons.delivery_dining_rounded,
+    'Package Handler': Icons.inventory_2_rounded,
+    'Food Delivery': Icons.delivery_dining_rounded,
+    'Grocery Delivery': Icons.shopping_bag_rounded,
+    'Moving Helper': Icons.move_up_rounded,
+    'Errand Runner': Icons.directions_run_rounded,
+    'Cleaner': Icons.cleaning_services_rounded,
+    'House Cleaner': Icons.home_rounded,
+    'Office Cleaner': Icons.business_rounded,
+    'Laundry Assistant': Icons.local_laundry_service_rounded,
+    'Maintenance Helper': Icons.handyman_rounded,
+    'Gardening Assistant': Icons.grass_rounded,
+    'Window Cleaning': Icons.window_rounded,
+    'Babysitter': Icons.child_care_rounded,
+    'Nanny Assistant': Icons.child_friendly_rounded,
+    'After-school Helper': Icons.school_rounded,
+    'Child Activity Helper': Icons.toys_rounded,
+    'School Pickup Helper': Icons.directions_car_rounded,
+    'Homework Helper': Icons.menu_book_rounded,
+    'Dog Walker': Icons.pets_rounded,
+    'Pet Sitter': Icons.pets_rounded,
+    'Pet Feeding': Icons.pets_rounded,
+    'Pet Grooming Assistant': Icons.content_cut_rounded,
+    'Dog Daycare Helper': Icons.pets_rounded,
+    'Home Assistant': Icons.home_rounded,
+    'Elderly Companion': Icons.elderly_rounded,
+    'Elderly Assistance': Icons.volunteer_activism_rounded,
+    'House Sitting': Icons.house_rounded,
+    'Meal Prep Helper': Icons.restaurant_menu_rounded,
+    'Shopping Helper': Icons.shopping_cart_rounded,
+    'Organization Helper': Icons.inventory_rounded,
+    'Private Tutor': Icons.school_rounded,
+    'Homework Tutor': Icons.menu_book_rounded,
+    'Math Tutor': Icons.calculate_rounded,
+    'English Tutor': Icons.translate_rounded,
+    'Hebrew Tutor': Icons.language_rounded,
+    'Computer Tutor': Icons.computer_rounded,
+    'Exam Prep Helper': Icons.edit_note_rounded,
+    'Administrative Assistant': Icons.badge_rounded,
+    'Data Entry': Icons.keyboard_rounded,
+    'Receptionist': Icons.support_agent_rounded,
+    'Office Assistant': Icons.business_center_rounded,
+    'Document Scanning': Icons.document_scanner_rounded,
+    'Filing Assistant': Icons.folder_rounded,
+    'Call Center Assistant': Icons.call_rounded,
+    'Medical Assistant': Icons.local_hospital_rounded,
+    'Home Health Aide': Icons.health_and_safety_rounded,
+    'Pharmacy Assistant': Icons.medication_rounded,
+    'Clinic Receptionist': Icons.local_hospital_rounded,
+    'Patient Support Assistant': Icons.volunteer_activism_rounded,
+    'Laborer': Icons.construction_rounded,
+    'Helper': Icons.handyman_rounded,
+    'Site Assistant': Icons.engineering_rounded,
+    'Painter Helper': Icons.format_paint_rounded,
+    'Renovation Helper': Icons.construction_rounded,
+    'Furniture Assembly Helper': Icons.chair_rounded,
+    'Moving Assistant': Icons.move_up_rounded,
+    'Salon Assistant': Icons.spa_rounded,
+    'Spa Assistant': Icons.spa_rounded,
+    'Makeup Assistant': Icons.face_retouching_natural_rounded,
+    'Fitness Studio Assistant': Icons.fitness_center_rounded,
+    'Flyer Distributor': Icons.local_post_office_rounded,
+    'Social Media Helper': Icons.public_rounded,
+    'Content Assistant': Icons.edit_rounded,
+    'Survey Collector': Icons.assignment_rounded,
+    'Computer Setup Helper': Icons.computer_rounded,
+    'Phone Setup Helper': Icons.phone_android_rounded,
+    'Basic Tech Support': Icons.support_agent_rounded,
+    'Website Content Assistant': Icons.web_rounded,
+    'Social Media Assistant': Icons.public_rounded,
+    'Photo Upload Assistant': Icons.photo_camera_rounded,
+    'General Helper': Icons.work_outline_rounded,
+    'Flexible Worker': Icons.autorenew_rounded,
+    'Short-notice Helper': Icons.flash_on_rounded,
   };
 
   static const List<String> availableSkills = [
@@ -61,6 +361,19 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
     'Inventory Management',
     'Time Management',
     'Teamwork',
+    'Working with Children',
+    'Pet Care',
+    'Tutoring',
+    'Cooking',
+    'Organization',
+    'Sales',
+    'Communication',
+    'Phone Support',
+    'Basic Tech Support',
+    'Event Setup',
+    'Reliability',
+    'Fast Learner',
+    'Physical Work',
   ];
 
   static const List<String> experienceLevels = [
@@ -92,6 +405,7 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
       (index) => _createAnimation(index),
     );
     _animationController.forward();
+    _loadExistingProfile();
   }
 
   @override
@@ -121,6 +435,90 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
       CurvedAnimation(
         parent: _animationController,
         curve: intervals[index],
+      ),
+    );
+  }
+
+  Future<void> _loadExistingProfile() async {
+    try {
+      final profile = await _profileService.getCurrentEmployeeProfile();
+      if (!mounted) return;
+
+      if (profile != null) {
+        final categories = _readStringList(profile, 'jobCategories');
+        final roles = _readStringList(profile, 'preferredRoles');
+        final savedSkills = _readStringList(profile, 'skills');
+        final knownRoles = rolesByCategory.values.expand((items) => items).toSet();
+
+        selectedCategories = categories.where(rolesByCategory.containsKey).toList();
+        final customCategories = categories.where((item) => !rolesByCategory.containsKey(item)).toList();
+        if (customCategories.isNotEmpty) {
+          isOtherCategorySelected = true;
+          customCategoryController.text = customCategories.first;
+        }
+
+        selectedRoles = roles.where(knownRoles.contains).toList();
+        final customRoles = roles.where((item) => !knownRoles.contains(item)).toList();
+        if (customRoles.isNotEmpty) {
+          isOtherRoleSelected = true;
+          customRoleController.text = customRoles.first;
+        }
+
+        selectedSkills = savedSkills.where(availableSkills.contains).toList();
+        final customSkills = savedSkills.where((item) => !availableSkills.contains(item)).toList();
+        if (customSkills.isNotEmpty) {
+          isOtherSkillSelected = true;
+          customSkillController.text = customSkills.first;
+        }
+
+        final savedExperienceLevel = _readString(profile, 'experienceLevel');
+        if (experienceLevels.contains(savedExperienceLevel)) {
+          experienceLevel = savedExperienceLevel;
+        }
+
+        salary = _readDouble(profile, 'salaryExpectation', salary)
+            .clamp(30, 80)
+            .toDouble();
+        selectedJobTypes = _readStringList(profile, 'preferredJobTypes')
+            .where(jobTypes.contains)
+            .toList();
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Could not load your saved work preferences.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isPreloading = false);
+      }
+    }
+  }
+
+  List<String> _readStringList(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if (value is List) {
+      return value.map((item) => item.toString()).where((item) => item.isNotEmpty).toList();
+    }
+    return const [];
+  }
+
+  String _readString(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    return value == null ? '' : value.toString();
+  }
+
+  double _readDouble(Map<String, dynamic> data, String key, double fallback) {
+    final value = data[key];
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade600,
       ),
     );
   }
@@ -158,21 +556,20 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
       );
 
       if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const EmployeeAvailabilityLocationPage(),
-          ),
-        );
+        if (widget.isEditing) {
+          Navigator.pop(context);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const EmployeeAvailabilityLocationPage(),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to save preferences: ${e.toString()}'),
-            backgroundColor: Colors.red.shade600,
-          ),
-        );
+        _showError('Failed to save preferences: ${e.toString()}');
       }
     } finally {
       if (mounted) {
@@ -183,6 +580,8 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
 
   @override
   Widget build(BuildContext context) {
+    final isBusy = isLoading || isPreloading;
+
     return Scaffold(
       backgroundColor: AppColors.coralAccent,
       body: SafeArea(
@@ -276,6 +675,13 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                             ...rolesByCategory.keys.map((category) => FilterChip(
                               label: Text(category),
                               selected: selectedCategories.contains(category),
+                              avatar: Icon(
+                                categoryIcons[category] ?? Icons.work_outline_rounded,
+                                size: 18,
+                                color: selectedCategories.contains(category)
+                                    ? AppColors.navyBg
+                                    : AppColors.coralAccent,
+                              ),
                               onSelected: (selected) {
                                 setState(() {
                                   if (selected) {
@@ -300,6 +706,13 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                             FilterChip(
                               label: const Text('Other'),
                               selected: isOtherCategorySelected,
+                              avatar: Icon(
+                                Icons.more_horiz_rounded,
+                                size: 18,
+                                color: isOtherCategorySelected
+                                    ? AppColors.navyBg
+                                    : AppColors.coralAccent,
+                              ),
                               onSelected: (selected) {
                                 setState(() {
                                   isOtherCategorySelected = selected;
@@ -351,7 +764,7 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
               const SizedBox(height: 24),
 
               // Preferred Roles (only show if categories selected)
-              if (selectedCategories.isNotEmpty)
+              if (selectedCategories.isNotEmpty || isOtherCategorySelected)
                 FadeTransition(
                   opacity: _animations[4],
                   child: SlideTransition(
@@ -359,9 +772,6 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                       begin: const Offset(0, 0.35),
                       end: Offset.zero,
                     ).animate(_animations[4]),
-                    child: _buildSection(
-                      title: 'Preferred Roles',
-                      subtitle: 'Choose specific positions you\'re interested in',
                     child: _buildSection(
                       title: 'Preferred Roles',
                       subtitle: 'Choose specific positions you\'re interested in',
@@ -377,6 +787,13 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                                   .map((role) => FilterChip(
                                 label: Text(role),
                                 selected: selectedRoles.contains(role),
+                                avatar: Icon(
+                                  roleIcons[role] ?? Icons.work_outline_rounded,
+                                  size: 16,
+                                  color: selectedRoles.contains(role)
+                                      ? AppColors.navyBg
+                                      : AppColors.coralAccent,
+                                ),
                                 onSelected: (selected) {
                                   setState(() {
                                     if (selected) {
@@ -398,6 +815,13 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                               FilterChip(
                                 label: const Text('Other'),
                                 selected: isOtherRoleSelected,
+                                avatar: Icon(
+                                  Icons.more_horiz_rounded,
+                                  size: 16,
+                                  color: isOtherRoleSelected
+                                      ? AppColors.navyBg
+                                      : AppColors.coralAccent,
+                                ),
                                 onSelected: (selected) {
                                   setState(() {
                                     isOtherRoleSelected = selected;
@@ -443,11 +867,10 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                         ],
                       ),
                     ),
-                    ),
                   ),
                 ),
 
-              if (selectedCategories.isNotEmpty) const SizedBox(height: 24),
+              if (selectedCategories.isNotEmpty || isOtherCategorySelected) const SizedBox(height: 24),
 
               // Skills
               FadeTransition(
@@ -691,18 +1114,18 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: !isLoading ? _handleContinue : null,
+                      onPressed: !isBusy ? _handleContinue : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navyBg,
                         disabledBackgroundColor: AppColors.navyBg.withOpacity(0.45),
                         shape: const StadiumBorder(),
                       ),
-                      child: isLoading
+                      child: isBusy
                           ? const CircularProgressIndicator(
                               color: AppColors.coralAccent,
                             )
                           : Text(
-                              'Continue',
+                              widget.isEditing ? 'Save changes' : 'Continue',
                               style: AppTextStyles.buttonLabel(color: AppColors.coralAccent),
                             ),
                     ),
