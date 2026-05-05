@@ -6,7 +6,9 @@ import '../../employer_home/screens/employer_main_navigation_page.dart';
 import '../services/employer_profile_service.dart';
 
 class EmployerProfileSummaryPage extends StatefulWidget {
-  const EmployerProfileSummaryPage({super.key});
+  final bool isEditing;
+
+  const EmployerProfileSummaryPage({super.key, this.isEditing = false});
 
   @override
   State<EmployerProfileSummaryPage> createState() => _EmployerProfileSummaryPageState();
@@ -108,13 +110,17 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
 
       if (!mounted) return;
 
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const EmployerMainNavigationPage(),
-        ),
-        (route) => false,
-      );
+      if (widget.isEditing) {
+        Navigator.pop(context);
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const EmployerMainNavigationPage(),
+          ),
+          (route) => false,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -484,7 +490,7 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
                       valueColor: AlwaysStoppedAnimation<Color>(AppColors.navyBg),
                     )
                   : Text(
-                      'Finish',
+                      widget.isEditing ? 'Save changes' : 'Finish',
                       style: AppTextStyles.buttonLabel(color: AppColors.navyBg),
                     ),
             ),

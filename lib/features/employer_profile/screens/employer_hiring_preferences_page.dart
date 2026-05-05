@@ -5,7 +5,9 @@ import '../services/employer_profile_service.dart';
 import 'employer_profile_summary_page.dart';
 
 class EmployerHiringPreferencesPage extends StatefulWidget {
-  const EmployerHiringPreferencesPage({super.key});
+  final bool isEditing;
+
+  const EmployerHiringPreferencesPage({super.key, this.isEditing = false});
 
   @override
   State<EmployerHiringPreferencesPage> createState() => _EmployerHiringPreferencesPageState();
@@ -16,6 +18,7 @@ class _EmployerHiringPreferencesPageState extends State<EmployerHiringPreference
   final EmployerProfileService _profileService = EmployerProfileService();
 
   bool _isLoading = false;
+  bool _isPreloading = true;
   bool _isFormComplete = false;
   bool _urgentHiringEnabled = true;
   bool _usuallyNeedsShortNoticeWorkers = true;
@@ -87,6 +90,7 @@ class _EmployerHiringPreferencesPageState extends State<EmployerHiringPreference
     );
     _animations = List.generate(8, (index) => _createAnimation(index));
     _animationController.forward();
+    _loadExistingProfile();
   }
 
   Animation<double> _createAnimation(int index) {
@@ -129,6 +133,104 @@ class _EmployerHiringPreferencesPageState extends State<EmployerHiringPreference
         _isFormComplete = isComplete;
       });
     }
+  }
+
+  Future<void> _loadExistingProfile() async {
+    try {
+      final profile = await _profileService.getEmployerProfile();
+      if (!mounted) return;
+
+      if (profile != null) {
+        _setSelectedOptions(
+          savedValues: _readStringList(profile, 'hiringCategories'),
+          options: _hiringCategoryOptions,
+          selectedValues: _selectedHiringCategories,
+        );
+        _setSelectedOptions(
+          savedValues: _readStringList(profile, 'requiredSkills'),
+          options: _requiredSkillOptions,
+          selectedValues: _selectedRequiredSkills,
+        );
+        _setSelectedOptions(
+          savedValues: _readStringList(profile, 'typicalShiftTypes'),
+          options: _shiftTypeOptions,
+          selectedValues: _selectedShiftTypes,
+        );
+
+        _urgentHiringEnabled = _readBool(profile, 'urgentHiringEnabled', _urgentHiringEnabled);
+        _usuallyNeedsShortNoticeWorkers = _readBool(
+          profile,
+          'usuallyNeedsShortNoticeWorkers',
+          _usuallyNeedsShortNoticeWorkers,
+        );
+
+        final minRate = _readDouble(profile, 'defaultHourlyRateMin', _hourlyRateRange.start);
+        final maxRate = _readDouble(profile, 'defaultHourlyRateMax', _hourlyRateRange.end);
+        final safeMinRate = minRate.clamp(30, 120).toDouble();
+        final safeMaxRate = maxRate.clamp(30, 120).toDouble();
+        _hourlyRateRange = RangeValues(
+          safeMinRate <= safeMaxRate ? safeMinRate : safeMaxRate,
+          safeMaxRate >= safeMinRate ? safeMaxRate : safeMinRate,
+        );
+
+        final experience = _readString(profile, 'preferredExperienceLevel');
+        if (experience.isNotEmpty) {
+          if (!_experienceLevelOptions.contains(experience)) {
+            _experienceLevelOptions.add(experience);
+          }
+          _preferredExperienceLevel = experience;
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Could not load your saved hiring preferences.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPreloading = false);
+        _updateFormComplete();
+      }
+    }
+  }
+
+  void _setSelectedOptions({
+    required List<String> savedValues,
+    required List<String> options,
+    required Set<String> selectedValues,
+  }) {
+    for (final value in savedValues) {
+      if (!options.contains(value)) {
+        options.add(value);
+      }
+      selectedValues.add(value);
+    }
+  }
+
+  List<String> _readStringList(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if (value is List) {
+      return value.map((item) => item.toString()).where((item) => item.isNotEmpty).toList();
+    }
+    return const [];
+  }
+
+  String _readString(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    return value == null ? '' : value.toString();
+  }
+
+  bool _readBool(Map<String, dynamic> data, String key, bool fallback) {
+    final value = data[key];
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return fallback;
+  }
+
+  double _readDouble(Map<String, dynamic> data, String key, double fallback) {
+    final value = data[key];
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? fallback;
+    return fallback;
   }
 
   void _showError(String message) {
@@ -174,12 +276,16 @@ class _EmployerHiringPreferencesPageState extends State<EmployerHiringPreference
 
       if (!mounted) return;
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const EmployerProfileSummaryPage(),
-        ),
-      );
+      if (widget.isEditing) {
+        Navigator.pop(context);
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const EmployerProfileSummaryPage(),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         _showError('Failed to save preferences: ${e.toString()}');
@@ -457,7 +563,8 @@ class _EmployerHiringPreferencesPageState extends State<EmployerHiringPreference
 
   @override
   Widget build(BuildContext context) {
-    final canContinue = !_isLoading && _isFormComplete;
+    final isBusy = _isLoading || _isPreloading;
+    final canContinue = !isBusy && _isFormComplete;
 
     return Scaffold(
       backgroundColor: AppColors.navyBg,
@@ -713,12 +820,12 @@ class _EmployerHiringPreferencesPageState extends State<EmployerHiringPreference
                       foregroundColor: AppColors.navyBg,
                       disabledBackgroundColor: AppColors.coralAccent.withOpacity(0.35),
                     ),
-                    child: _isLoading
+                    child: isBusy
                         ? const CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(AppColors.navyBg),
                           )
                         : Text(
-                            'Continue',
+                            widget.isEditing ? 'Save changes' : 'Continue',
                             style: AppTextStyles.buttonLabel(color: AppColors.navyBg),
                           ),
                   ),

@@ -6,7 +6,9 @@ import '../services/employer_profile_service.dart';
 import 'employer_hiring_preferences_page.dart';
 
 class EmployerBusinessLocationPage extends StatefulWidget {
-  const EmployerBusinessLocationPage({super.key});
+  final bool isEditing;
+
+  const EmployerBusinessLocationPage({super.key, this.isEditing = false});
 
   @override
   State<EmployerBusinessLocationPage> createState() => _EmployerBusinessLocationPageState();
@@ -18,6 +20,7 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
   final TextEditingController _businessAddressController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isPreloading = true;
   bool _isFormComplete = false;
   bool _isPhysicalBusiness = true;
   bool _isDetectingLocation = false;
@@ -29,7 +32,7 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
   late AnimationController _animationController;
   late List<Animation<double>> _animations;
 
-  static const List<String> _cities = [
+  static final List<String> _cities = [
     'Jerusalem',
     'Tel Aviv',
     'Haifa',
@@ -53,6 +56,7 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
     _animations = List.generate(7, (index) => _createAnimation(index));
     _businessAddressController.addListener(_updateFormComplete);
     _animationController.forward();
+    _loadExistingProfile();
   }
 
   Animation<double> _createAnimation(int index) {
@@ -90,6 +94,60 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
         _isFormComplete = isComplete;
       });
     }
+  }
+
+  Future<void> _loadExistingProfile() async {
+    try {
+      final profile = await _profileService.getEmployerProfile();
+      if (!mounted) return;
+
+      if (profile != null) {
+        _businessAddressController.text = _readString(profile, 'businessAddress');
+        final city = _readString(profile, 'city');
+        if (city.isNotEmpty) {
+          if (!_cities.contains(city)) {
+            _cities.add(city);
+          }
+          _selectedCity = city;
+        }
+        _isPhysicalBusiness = _readBool(profile, 'isPhysicalBusiness', _isPhysicalBusiness);
+        _locationCaptured = _readBool(profile, 'locationPermissionGranted', false);
+
+        final location = profile['location'];
+        if (location is Map) {
+          _latitude = _readNullableDouble(location['lat']);
+          _longitude = _readNullableDouble(location['lng']);
+          _locationCaptured = _latitude != null && _longitude != null;
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Could not load your saved business location.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPreloading = false);
+        _updateFormComplete();
+      }
+    }
+  }
+
+  String _readString(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    return value == null ? '' : value.toString();
+  }
+
+  bool _readBool(Map<String, dynamic> data, String key, bool fallback) {
+    final value = data[key];
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return fallback;
+  }
+
+  double? _readNullableDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   void _showError(String message) {
@@ -169,12 +227,16 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
 
       if (!mounted) return;
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const EmployerHiringPreferencesPage(),
-        ),
-      );
+      if (widget.isEditing) {
+        Navigator.pop(context);
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const EmployerHiringPreferencesPage(),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         _showError('Failed to save location: ${e.toString()}');
@@ -203,7 +265,8 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
 
   @override
   Widget build(BuildContext context) {
-    final canContinue = !_isLoading && _isFormComplete;
+    final isBusy = _isLoading || _isPreloading;
+    final canContinue = !isBusy && _isFormComplete;
 
     return Scaffold(
       backgroundColor: AppColors.navyBg,
@@ -259,6 +322,7 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
                   children: [
                     TextFormField(
                       controller: _businessAddressController,
+                      enabled: !isBusy,
                       style: AppTextStyles.input,
                       decoration: AppInputDecorations.authField(
                         label: 'Business address',
@@ -268,7 +332,7 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
                     const SizedBox(height: AppSpacing.field),
                     DropdownButtonFormField<String>(
                       value: _selectedCity,
-                      onChanged: (String? newValue) {
+                      onChanged: isBusy ? null : (String? newValue) {
                         setState(() {
                           _selectedCity = newValue;
                         });
@@ -337,7 +401,7 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: _isDetectingLocation ? null : _detectCurrentLocation,
+                          onPressed: isBusy || _isDetectingLocation ? null : _detectCurrentLocation,
                           icon: _isDetectingLocation
                               ? const SizedBox(
                                   width: 18,
@@ -382,7 +446,7 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
                     ),
                   ),
                   value: _isPhysicalBusiness,
-                  onChanged: (value) {
+                  onChanged: isBusy ? null : (value) {
                     setState(() {
                       _isPhysicalBusiness = value;
                     });
@@ -407,12 +471,12 @@ class _EmployerBusinessLocationPageState extends State<EmployerBusinessLocationP
                       foregroundColor: AppColors.navyBg,
                       disabledBackgroundColor: AppColors.coralAccent.withOpacity(0.35),
                     ),
-                    child: _isLoading
+                    child: isBusy
                         ? const CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(AppColors.navyBg),
                           )
                         : Text(
-                            'Continue',
+                            widget.isEditing ? 'Save changes' : 'Continue',
                             style: AppTextStyles.buttonLabel(color: AppColors.navyBg),
                           ),
                   ),
