@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:geolocator/geolocator.dart';
 
 class EmployeeProfileService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   Future<void> saveBasicInfo({
     required String name,
@@ -20,16 +23,26 @@ class EmployeeProfileService {
     final uid = user.uid;
     final now = FieldValue.serverTimestamp();
 
-    // Save to employeeProfiles/{uid}
-    await _firestore.collection('employeeProfiles').doc(uid).set({
+    // Build the data map - only include profileImageUrl if provided
+    final Map<String, dynamic> data = {
       'uid': uid,
       'name': name,
       'phoneNumber': phoneNumber,
       'ageRange': ageRange,
-      'profileImageUrl': profileImageUrl,
       'updatedAt': now,
       'createdAt': now,
-    }, SetOptions(merge: true));
+    };
+
+    // Only add profileImageUrl if it's provided and not empty
+    if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+      data['profileImageUrl'] = profileImageUrl;
+    }
+
+    // Save to employeeProfiles/{uid}
+    await _firestore.collection('employeeProfiles').doc(uid).set(
+      data,
+      SetOptions(merge: true),
+    );
 
     // Update users/{uid}
     await _firestore.collection('users').doc(uid).set({
@@ -217,9 +230,11 @@ class EmployeeProfileService {
     Map<String, dynamic> updateData = {
       'locationPermissionGranted': locationPermissionGranted,
       'preferredWorkRadiusKm': preferredWorkRadiusKm,
+      'availableNow': isAvailableNow,
       'isAvailableNow': isAvailableNow,
       'availableDays': availableDays,
       'preferredShiftTypes': preferredShiftTypes,
+      'canWorkOnShortNotice': canWorkShortNotice,
       'canWorkShortNotice': canWorkShortNotice,
       'canWorkToday': canWorkToday,
       'updatedAt': now,
@@ -267,9 +282,8 @@ class EmployeeProfileService {
       profileUpdateData['shortBio'] = shortBio;
     }
 
-    if (pastExperiences.isNotEmpty) {
-      profileUpdateData['pastExperiences'] = pastExperiences;
-    }
+    profileUpdateData['pastWorkExperience'] = pastExperiences;
+    profileUpdateData['pastExperiences'] = pastExperiences;
 
     // Save to employeeProfiles/{uid}
     await _firestore.collection('employeeProfiles').doc(uid).set(
@@ -283,5 +297,78 @@ class EmployeeProfileService {
       'onboardingStep': 'completed',
       'updatedAt': now,
     }, SetOptions(merge: true));
+  }
+
+  /// Streams the current authenticated employee profile from Firestore.
+  /// Returns a Stream that emits the profile data as Map<String, dynamic>
+  /// If no user is logged in, throws an error.
+  /// The uid is included in the returned map.
+  Stream<Map<String, dynamic>?> watchCurrentEmployeeProfile() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return Stream.error(Exception('No authenticated user found'));
+    }
+
+    final uid = user.uid;
+    return _firestore
+        .collection('employeeProfiles')
+        .doc(uid)
+        .snapshots()
+        .map((snapshot) {
+          if (!snapshot.exists) {
+            return null;
+          }
+          final data = snapshot.data() ?? {};
+          // Ensure uid is included
+          data['uid'] = uid;
+          return data;
+        });
+  }
+
+  /// Gets the current authenticated employee profile from Firestore.
+  /// Returns a Future that resolves to the profile data as Map<String, dynamic>
+  /// If no user is logged in or profile doesn't exist, returns null.
+  Future<Map<String, dynamic>?> getCurrentEmployeeProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return null;
+    }
+
+    final uid = user.uid;
+    final snapshot = await _firestore
+        .collection('employeeProfiles')
+        .doc(uid)
+        .get();
+
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    final data = snapshot.data() ?? {};
+    data['uid'] = uid;
+    return data;
+  }
+
+  /// Uploads a profile image to Firebase Storage and returns the download URL.
+  /// The image is stored at: employee_profile_images/{uid}/profile.jpg
+  /// If the image already exists at this path, it will be replaced.
+  Future<String> uploadEmployeeProfileImage({
+    required File imageFile,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('No authenticated user found');
+    }
+
+    final uid = user.uid;
+    final ref = _storage.ref().child('employee_profile_images/$uid/profile.jpg');
+
+    // Upload the file
+    final uploadTask = await ref.putFile(imageFile);
+
+    // Get the download URL
+    final downloadUrl = await uploadTask.ref.getDownloadURL();
+
+    return downloadUrl;
   }
 }

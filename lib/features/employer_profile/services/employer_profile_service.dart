@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:geolocator/geolocator.dart';
 
 class EmployerProfileService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   Future<void> saveBusinessInfo({
     required String businessName,
@@ -29,11 +33,22 @@ class EmployerProfileService {
       'businessName': businessName,
       'businessType': businessType,
       'businessPhone': businessPhone,
-      'businessEmail': businessEmail,
-      'businessDescription': businessDescription,
-      'businessLogoUrl': businessLogoUrl,
       'updatedAt': now,
     };
+
+    final trimmedEmail = businessEmail?.trim();
+    if (trimmedEmail != null && trimmedEmail.isNotEmpty) {
+      employerData['businessEmail'] = trimmedEmail;
+    }
+
+    final trimmedDescription = businessDescription?.trim();
+    if (trimmedDescription != null && trimmedDescription.isNotEmpty) {
+      employerData['businessDescription'] = trimmedDescription;
+    }
+
+    if (businessLogoUrl != null && businessLogoUrl.isNotEmpty) {
+      employerData['businessLogoUrl'] = businessLogoUrl;
+    }
 
     if (!snapshot.exists) {
       employerData['createdAt'] = now;
@@ -175,7 +190,7 @@ class EmployerProfileService {
   Future<Map<String, dynamic>?> getEmployerProfile() async {
     final user = _auth.currentUser;
     if (user == null) {
-      throw Exception('No authenticated user found');
+      return null;
     }
 
     final snapshot = await _firestore.collection('employerProfiles').doc(user.uid).get();
@@ -183,7 +198,40 @@ class EmployerProfileService {
       return null;
     }
 
-    return snapshot.data();
+    final data = snapshot.data() ?? {};
+    data['uid'] = user.uid;
+    return data;
+  }
+
+  Stream<Map<String, dynamic>?> watchCurrentEmployerProfile() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return Stream.error(Exception('No authenticated user found'));
+    }
+
+    final uid = user.uid;
+    return _firestore.collection('employerProfiles').doc(uid).snapshots().map((snapshot) {
+      if (!snapshot.exists) {
+        return null;
+      }
+
+      final data = snapshot.data() ?? {};
+      data['uid'] = uid;
+      return data;
+    });
+  }
+
+  Future<String> uploadEmployerBusinessLogo({
+    required File imageFile,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('No authenticated user found');
+    }
+
+    final ref = _storage.ref().child('employer_profile_logos/${user.uid}/business_logo.jpg');
+    final uploadTask = await ref.putFile(imageFile);
+    return uploadTask.ref.getDownloadURL();
   }
 
   Future<void> completeEmployerProfile({
