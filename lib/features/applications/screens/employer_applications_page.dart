@@ -40,9 +40,14 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
         status: status,
       );
       if (mounted) {
+        final message = status == 'approved'
+            ? 'Application approved. Match and chat created.'
+            : status == 'rejected'
+            ? 'Application rejected.'
+            : 'Application status updated.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Application $status successfully'),
+            content: Text(message),
             backgroundColor: Colors.green.shade600,
           ),
         );
@@ -147,7 +152,8 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                     return ListView.separated(
                       physics: const BouncingScrollPhysics(),
                       itemCount: applications.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 16),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 16),
                       itemBuilder: (context, index) {
                         final application = applications[index].data();
                         final applicationId = applications[index].id;
@@ -163,6 +169,8 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                         final isProcessing = _processingIds.contains(
                           applicationId,
                         );
+                        final chatId = application['chatId'] as String?;
+                        final hasChat = chatId?.trim().isNotEmpty == true;
 
                         return Container(
                           width: double.infinity,
@@ -198,7 +206,7 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                                     decoration: BoxDecoration(
                                       color: _statusColor(
                                         status,
-                                      ).withOpacity(0.16),
+                                      ).withValues(alpha: 0.16),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -287,9 +295,11 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                                 child: ElevatedButton(
                                   onPressed: () {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
+                                      SnackBar(
                                         content: Text(
-                                          'Chat feature will be implemented next',
+                                          hasChat
+                                              ? 'Chat is ready. Messages screen will be connected next.'
+                                              : 'Approve this application to create a chat.',
                                         ),
                                       ),
                                     );

@@ -9,6 +9,27 @@ class ApplicationService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
+  String _readString(Map<String, dynamic>? data, String key, String fallback) {
+    final value = data?[key];
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+
+    return fallback;
+  }
+
+  void _addOptionalField(
+    Map<String, dynamic> target,
+    String targetKey,
+    Map<String, dynamic>? source,
+    String sourceKey,
+  ) {
+    final value = source?[sourceKey];
+    if (value != null) {
+      target[targetKey] = value;
+    }
+  }
+
   Future<String> _resolveEmployeeName(String employeeId) async {
     final profileDoc = await _firestore
         .collection('employeeProfiles')
@@ -31,9 +52,6 @@ class ApplicationService {
     required String jobId,
     required String employeeId,
   }) async {
-    print(
-      'DEBUG: Running hasApplied query: applications.where(jobId=$jobId, employeeId=$employeeId).limit(1).get()',
-    );
     final query = await _firestore
         .collection('applications')
         .where('jobId', isEqualTo: jobId)
@@ -96,9 +114,6 @@ class ApplicationService {
   Stream<QuerySnapshot<Map<String, dynamic>>> getEmployeeApplications(
     String employeeId,
   ) {
-    print(
-      'DEBUG: Running getEmployeeApplications query: applications.where(employeeId=$employeeId).orderBy(createdAt DESC).snapshots()',
-    );
     return _firestore
         .collection('applications')
         .where('employeeId', isEqualTo: employeeId)
@@ -109,9 +124,6 @@ class ApplicationService {
   Stream<QuerySnapshot<Map<String, dynamic>>> getApplicationsForEmployer(
     String employerId,
   ) {
-    print(
-      'DEBUG: Running getApplicationsForEmployer query: applications.where(employerId=$employerId).orderBy(createdAt DESC).snapshots()',
-    );
     return _firestore
         .collection('applications')
         .where('employerId', isEqualTo: employerId)
@@ -136,25 +148,162 @@ class ApplicationService {
     final applicationRef = _firestore
         .collection('applications')
         .doc(applicationId);
-    final applicationDoc = await applicationRef.get();
 
-    if (!applicationDoc.exists) {
-      throw Exception('Application not found');
-    }
+    await _firestore.runTransaction((transaction) async {
+      final applicationDoc = await transaction.get(applicationRef);
 
-    final applicationData = applicationDoc.data();
-    if (applicationData == null) {
-      throw Exception('Application data is unavailable');
-    }
+      if (!applicationDoc.exists) {
+        throw Exception('Application not found');
+      }
 
-    final employerId = applicationData['employerId'] as String?;
-    if (employerId != currentUser.uid) {
-      throw Exception('You can only update applications for your own jobs');
-    }
+      final applicationData = applicationDoc.data();
+      if (applicationData == null) {
+        throw Exception('Application data is unavailable');
+      }
 
-    await applicationRef.update({
-      'status': status,
-      'updatedAt': FieldValue.serverTimestamp(),
+      final employerId = applicationData['employerId'] as String?;
+      if (employerId != currentUser.uid) {
+        throw Exception('You can only update applications for your own jobs');
+      }
+
+      if (status == 'rejected') {
+        transaction.update(applicationRef, {
+          'status': 'rejected',
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      if (status == 'pending') {
+        transaction.update(applicationRef, {
+          'status': 'pending',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      final existingMatchId = applicationData['matchId'] as String?;
+      final existingChatId = applicationData['chatId'] as String?;
+      if (existingMatchId?.trim().isNotEmpty == true &&
+          existingChatId?.trim().isNotEmpty == true) {
+        transaction.update(applicationRef, {
+          'status': 'approved',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      final jobId = applicationData['jobId'] as String?;
+      final employeeId = applicationData['employeeId'] as String?;
+      if (jobId == null || jobId.trim().isEmpty) {
+        throw Exception('Application job is missing');
+      }
+      if (employeeId == null || employeeId.trim().isEmpty) {
+        throw Exception('Application employee is missing');
+      }
+
+      final jobRef = _firestore.collection('jobs').doc(jobId);
+      final employeeProfileRef = _firestore
+          .collection('employeeProfiles')
+          .doc(employeeId);
+      final employerProfileRef = _firestore
+          .collection('employerProfiles')
+          .doc(employerId);
+
+      final jobDoc = await transaction.get(jobRef);
+      final employeeProfileDoc = await transaction.get(employeeProfileRef);
+      final employerProfileDoc = await transaction.get(employerProfileRef);
+
+      final jobData = jobDoc.data();
+      final employeeProfileData = employeeProfileDoc.data();
+      final employerProfileData = employerProfileDoc.data();
+
+      final employeeName = _readString(
+        applicationData,
+        'employeeName',
+        _readString(employeeProfileData, 'name', 'Worker'),
+      );
+      final employeeImageUrl = _readString(
+        employeeProfileData,
+        'profileImageUrl',
+        '',
+      );
+      final employerName = _readString(
+        employerProfileData,
+        'businessName',
+        'Business',
+      );
+      final employerImageUrl = _readString(
+        employerProfileData,
+        'businessLogoUrl',
+        '',
+      );
+      final jobTitle = _readString(
+        applicationData,
+        'jobTitle',
+        _readString(jobData, 'title', _readString(jobData, 'jobTitle', 'Job')),
+      );
+
+      final matchRef = _firestore.collection('matches').doc();
+      final chatRef = _firestore.collection('chats').doc();
+
+      final matchData = <String, dynamic>{
+        'matchId': matchRef.id,
+        'applicationId': applicationId,
+        'jobId': jobId,
+        'employeeId': employeeId,
+        'employerId': employerId,
+        'employeeName': employeeName,
+        'employeeImageUrl': employeeImageUrl,
+        'employerName': employerName,
+        'employerImageUrl': employerImageUrl,
+        'jobTitle': jobTitle,
+        'chatId': chatRef.id,
+        'status': 'active',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      _addOptionalField(matchData, 'jobLocation', jobData, 'location');
+      _addOptionalField(matchData, 'workDate', jobData, 'workDate');
+      _addOptionalField(matchData, 'salaryAmount', jobData, 'salaryAmount');
+      _addOptionalField(matchData, 'paymentType', jobData, 'paymentType');
+
+      final chatData = <String, dynamic>{
+        'chatId': chatRef.id,
+        'matchId': matchRef.id,
+        'applicationId': applicationId,
+        'jobId': jobId,
+        'employeeId': employeeId,
+        'employerId': employerId,
+        'participants': [employeeId, employerId],
+        'participantNames': {
+          employeeId: employeeName,
+          employerId: employerName,
+        },
+        'participantImages': {
+          employeeId: employeeImageUrl,
+          employerId: employerImageUrl,
+        },
+        'jobTitle': jobTitle,
+        'lastMessage': '',
+        'lastMessageAt': null,
+        'lastMessageSenderId': null,
+        'unreadCounts': {employeeId: 0, employerId: 0},
+        'isActive': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      transaction.update(applicationRef, {
+        'status': 'approved',
+        'matchId': matchRef.id,
+        'chatId': chatRef.id,
+        'approvedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      transaction.set(matchRef, matchData);
+      transaction.set(chatRef, chatData);
     });
   }
 }
