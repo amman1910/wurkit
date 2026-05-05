@@ -6,7 +6,9 @@ import '../services/employee_profile_service.dart';
 import 'employee_experience_summary_page.dart';
 
 class EmployeeAvailabilityLocationPage extends StatefulWidget {
-  const EmployeeAvailabilityLocationPage({super.key});
+  final bool isEditing;
+
+  const EmployeeAvailabilityLocationPage({super.key, this.isEditing = false});
 
   @override
   State<EmployeeAvailabilityLocationPage> createState() => _EmployeeAvailabilityLocationPageState();
@@ -18,6 +20,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
 
   // State variables
   bool _isLoading = false;
+  bool _isPreloading = true;
   bool _locationPermissionHandled = false;
   bool _locationPermissionGranted = false;
   double? _latitude;
@@ -54,7 +57,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
     'Night',
   ];
 
-  static const List<double> radiusOptions = [2, 5, 10, 15, 20, 30,50,70,90.120];
+  static const List<double> radiusOptions = [2, 5, 10, 15, 20, 30];
 
   @override
   void initState() {
@@ -68,6 +71,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       (index) => _createAnimation(index),
     );
     _animationController.forward();
+    _loadExistingProfile();
   }
 
   @override
@@ -99,9 +103,92 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
   }
 
   bool get _isFormValid {
-    return _locationPermissionHandled &&
+    return (widget.isEditing || _locationPermissionHandled) &&
            _selectedDays.isNotEmpty &&
            _selectedShiftTypes.isNotEmpty;
+  }
+
+  Future<void> _loadExistingProfile() async {
+    try {
+      final profile = await _profileService.getCurrentEmployeeProfile();
+      if (!mounted) return;
+
+      if (profile != null) {
+        final location = profile['location'];
+        _radiusKm = _readDouble(profile, 'preferredWorkRadiusKm', _radiusKm)
+            .clamp(2, 30)
+            .toDouble();
+        _isAvailableNow = _readBool(profile, 'availableNow', _readBool(profile, 'isAvailableNow', false));
+        _canWorkShortNotice = _readBool(
+          profile,
+          'canWorkOnShortNotice',
+          _readBool(profile, 'canWorkShortNotice', false),
+        );
+        _canWorkToday = _readBool(profile, 'canWorkToday', false);
+        _selectedDays = _readStringList(profile, 'availableDays')
+            .where(availableDays.contains)
+            .toList();
+        _selectedShiftTypes = _readStringList(profile, 'preferredShiftTypes')
+            .where(shiftTypes.contains)
+            .toList();
+        _locationPermissionGranted = _readBool(profile, 'locationPermissionGranted', false);
+        _locationPermissionHandled = profile.containsKey('locationPermissionGranted') || location is Map;
+
+        if (location is Map) {
+          _latitude = _readNullableDouble(location['lat']);
+          _longitude = _readNullableDouble(location['lng']);
+        }
+
+        if (_locationPermissionHandled) {
+          _locationStatusMessage = _locationPermissionGranted
+              ? 'Location enabled! We\'ll find jobs near you.'
+              : 'Location access is not enabled. You can continue without location.';
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Could not load your saved availability.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPreloading = false);
+      }
+    }
+  }
+
+  List<String> _readStringList(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if (value is List) {
+      return value.map((item) => item.toString()).where((item) => item.isNotEmpty).toList();
+    }
+    return const [];
+  }
+
+  bool _readBool(Map<String, dynamic> data, String key, bool fallback) {
+    final value = data[key];
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return fallback;
+  }
+
+  double _readDouble(Map<String, dynamic> data, String key, double fallback) {
+    final value = data[key];
+    return _readNullableDouble(value) ?? fallback;
+  }
+
+  double? _readNullableDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade600,
+      ),
+    );
   }
 
   Future<void> _handleLocationPermission() async {
@@ -190,22 +277,20 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       );
 
       if (mounted) {
-        // Navigate to next screen
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const EmployeeExperienceSummaryPage(),
-          ),
-        );
+        if (widget.isEditing) {
+          Navigator.pop(context);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const EmployeeExperienceSummaryPage(),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to save availability: ${e.toString()}'),
-            backgroundColor: Colors.red.shade600,
-          ),
-        );
+        _showError('Failed to save availability: ${e.toString()}');
       }
     } finally {
       if (mounted) {
@@ -216,6 +301,8 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
 
   @override
   Widget build(BuildContext context) {
+    final isBusy = _isLoading || _isPreloading;
+
     return Scaffold(
       backgroundColor: AppColors.coralAccent,
       body: SafeArea(
@@ -371,18 +458,18 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _isFormValid && !_isLoading ? _handleContinue : null,
+                      onPressed: _isFormValid && !isBusy ? _handleContinue : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navyBg,
                         disabledBackgroundColor: AppColors.navyBg.withOpacity(0.45),
                         shape: const StadiumBorder(),
                       ),
-                      child: _isLoading
+                      child: isBusy
                           ? const CircularProgressIndicator(
                               color: AppColors.coralAccent,
                             )
                           : Text(
-                              'Continue',
+                              widget.isEditing ? 'Save changes' : 'Continue',
                               style: AppTextStyles.buttonLabel(color: AppColors.coralAccent),
                             ),
                     ),
