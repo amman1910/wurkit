@@ -37,7 +37,9 @@ class _ExperienceItem {
 }
 
 class EmployeeExperienceSummaryPage extends StatefulWidget {
-  const EmployeeExperienceSummaryPage({super.key});
+  final bool isEditing;
+
+  const EmployeeExperienceSummaryPage({super.key, this.isEditing = false});
 
   @override
   State<EmployeeExperienceSummaryPage> createState() =>
@@ -51,6 +53,7 @@ class _EmployeeExperienceSummaryPageState extends State<EmployeeExperienceSummar
 
   final List<_ExperienceItem> _experiences = [];
   bool _isLoading = false;
+  bool _isPreloading = true;
 
   late AnimationController _animationController;
   late List<Animation<double>> _animations;
@@ -77,6 +80,7 @@ class _EmployeeExperienceSummaryPageState extends State<EmployeeExperienceSummar
       (index) => _createAnimation(index),
     );
     _animationController.forward();
+    _loadExistingProfile();
   }
 
   @override
@@ -112,6 +116,68 @@ class _EmployeeExperienceSummaryPageState extends State<EmployeeExperienceSummar
     return exp.jobTitleController.text.trim().isNotEmpty &&
         exp.workplaceController.text.trim().isNotEmpty &&
         (exp.selectedCategory != null && exp.selectedCategory!.isNotEmpty);
+  }
+
+  Future<void> _loadExistingProfile() async {
+    try {
+      final profile = await _profileService.getCurrentEmployeeProfile();
+      if (!mounted) return;
+
+      if (profile != null) {
+        _bioController.text = _readString(profile, 'shortBio');
+        final savedExperiences = _readExperienceList(profile);
+        for (final item in savedExperiences.take(3)) {
+          _experiences.add(_experienceFromMap(item));
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Could not load your saved experience.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPreloading = false);
+      }
+    }
+  }
+
+  String _readString(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    return value == null ? '' : value.toString();
+  }
+
+  List<Map<String, dynamic>> _readExperienceList(Map<String, dynamic> data) {
+    final value = data['pastWorkExperience'] ?? data['pastExperiences'];
+    if (value is List) {
+      return value
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    return const [];
+  }
+
+  _ExperienceItem _experienceFromMap(Map<String, dynamic> data) {
+    final item = _ExperienceItem(
+      jobTitleController: TextEditingController(text: _readString(data, 'jobTitle')),
+      workplaceController: TextEditingController(text: _readString(data, 'workplace')),
+      durationController: TextEditingController(text: _readString(data, 'duration')),
+      descriptionController: TextEditingController(text: _readString(data, 'description')),
+    );
+    final category = _readString(data, 'category');
+    if (experienceCategories.contains(category)) {
+      item.selectedCategory = category;
+    }
+    return item;
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade600,
+      ),
+    );
   }
 
   void _addExperience() {
@@ -166,22 +232,21 @@ class _EmployeeExperienceSummaryPageState extends State<EmployeeExperienceSummar
       );
 
       if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const EmployeeMainNavigationPage(),
-          ),
-          (route) => false,
-        );
+        if (widget.isEditing) {
+          Navigator.pop(context);
+        } else {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const EmployeeMainNavigationPage(),
+            ),
+            (route) => false,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to complete onboarding: ${e.toString()}'),
-            backgroundColor: Colors.red.shade600,
-          ),
-        );
+        _showError('Failed to complete onboarding: ${e.toString()}');
       }
     } finally {
       if (mounted) {
@@ -543,6 +608,8 @@ class _EmployeeExperienceSummaryPageState extends State<EmployeeExperienceSummar
 
   @override
   Widget build(BuildContext context) {
+    final isBusy = _isLoading || _isPreloading;
+
     return Scaffold(
       backgroundColor: AppColors.coralAccent,
       body: SafeArea(
@@ -689,18 +756,18 @@ class _EmployeeExperienceSummaryPageState extends State<EmployeeExperienceSummar
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: !_isLoading ? _handleFinish : null,
+                      onPressed: !isBusy ? _handleFinish : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navyBg,
                         disabledBackgroundColor: AppColors.navyBg.withValues(alpha: 0.45),
                         shape: const StadiumBorder(),
                       ),
-                      child: _isLoading
+                      child: isBusy
                           ? const CircularProgressIndicator(
                               color: AppColors.coralAccent,
                             )
                           : Text(
-                              'Finish',
+                              widget.isEditing ? 'Save changes' : 'Finish',
                               style: AppTextStyles.buttonLabel(color: AppColors.coralAccent),
                             ),
                     ),
