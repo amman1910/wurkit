@@ -8,7 +8,9 @@ import '../services/employee_profile_service.dart';
 import 'employee_work_preferences_page.dart';
 
 class EmployeeBasicInfoPage extends StatefulWidget {
-  const EmployeeBasicInfoPage({super.key});
+  final bool isEditing;
+
+  const EmployeeBasicInfoPage({super.key, this.isEditing = false});
 
   @override
   State<EmployeeBasicInfoPage> createState() => _EmployeeBasicInfoPageState();
@@ -22,8 +24,10 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
   final TextEditingController _ageController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isLoading = false;
+  bool _isPreloading = true;
   bool _isFormComplete = false;
   File? _selectedImageFile;
+  String? _existingProfileImageUrl;
 
   late AnimationController _animationController;
   late List<Animation<double>> _animations;
@@ -43,6 +47,7 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
     _phoneController.addListener(_updateFormComplete);
     _ageController.addListener(_updateFormComplete);
     _animationController.forward();
+    _loadExistingProfile();
   }
 
   Animation<double> _createAnimation(int index) {
@@ -79,6 +84,34 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
     return cleaned.length >= 10;
   }
 
+  Future<void> _loadExistingProfile() async {
+    try {
+      final profile = await _profileService.getCurrentEmployeeProfile();
+      if (!mounted) return;
+
+      if (profile != null) {
+        _nameController.text = _readString(profile, 'name');
+        _phoneController.text = _readString(profile, 'phoneNumber');
+        _ageController.text = _readString(profile, 'ageRange');
+        _existingProfileImageUrl = _readString(profile, 'profileImageUrl');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Could not load your saved profile details.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPreloading = false);
+        _updateFormComplete();
+      }
+    }
+  }
+
+  String _readString(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    return value == null ? '' : value.toString();
+  }
+
   Future<void> _handleContinue() async {
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
@@ -102,20 +135,31 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
     setState(() => _isLoading = true);
 
     try {
+      String? profileImageUrl;
+      if (_selectedImageFile != null) {
+        profileImageUrl = await _profileService.uploadEmployeeProfileImage(
+          imageFile: _selectedImageFile!,
+        );
+      }
+
       await _profileService.saveBasicInfo(
         name: name,
         phoneNumber: phone,
         ageRange: age,
-        profileImageUrl: null, // Placeholder
+        profileImageUrl: profileImageUrl,
       );
 
       if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const EmployeeWorkPreferencesPage(),
-          ),
-        );
+        if (widget.isEditing) {
+          Navigator.pop(context);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const EmployeeWorkPreferencesPage(),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -194,8 +238,44 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
     }
   }
 
+  Widget _buildProfileImagePreview() {
+    if (_selectedImageFile != null) {
+      return Image.file(
+        _selectedImageFile!,
+        width: 120,
+        height: 120,
+        fit: BoxFit.cover,
+      );
+    }
+
+    final imageUrl = _existingProfileImageUrl;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return Image.network(
+        imageUrl,
+        width: 120,
+        height: 120,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(
+            Icons.person,
+            size: 60,
+            color: AppColors.white,
+          );
+        },
+      );
+    }
+
+    return const Icon(
+      Icons.person,
+      size: 60,
+      color: AppColors.white,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isBusy = _isLoading || _isPreloading;
+
     return Scaffold(
       backgroundColor: AppColors.coralAccent,
       body: SafeArea(
@@ -250,29 +330,30 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
                     end: Offset.zero,
                   ).animate(_animations[2]),
                   child: GestureDetector(
-                    onTap: _pickAndCropImage,
+                    onTap: isBusy ? null : _pickAndCropImage,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundColor: AppColors.surface,
-                          backgroundImage: _selectedImageFile != null
-                              ? FileImage(_selectedImageFile!)
-                              : null,
-                          child: _selectedImageFile == null
-                              ? Icon(
-                                  Icons.person,
-                                  size: 60,
-                                  color: AppColors.white,
-                                )
-                              : null,
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.navyBg.withOpacity(0.18),
+                              width: 2,
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: _buildProfileImagePreview(),
+                          ),
                         ),
                         Positioned(
                           bottom: 0,
                           right: 0,
                           child: GestureDetector(
-                            onTap: _pickAndCropImage,
+                            onTap: isBusy ? null : _pickAndCropImage,
                             child: CircleAvatar(
                               radius: 18,
                               backgroundColor: AppColors.navyBg,
@@ -298,7 +379,9 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
                     end: Offset.zero,
                   ).animate(_animations[3]),
                   child: Text(
-                    'Add photo',
+                    _selectedImageFile != null || (_existingProfileImageUrl?.isNotEmpty ?? false)
+                        ? 'Change photo'
+                        : 'Add photo',
                     style: TextStyle(
                       color: AppColors.navyBg,
                       fontSize: 14,
@@ -328,6 +411,7 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                     child: TextFormField(
                       controller: _nameController,
+                      enabled: !isBusy,
                       decoration: const InputDecoration(
                         labelText: 'Name',
                         border: InputBorder.none,
@@ -359,6 +443,7 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                     child: TextFormField(
                       controller: _phoneController,
+                      enabled: !isBusy,
                       keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(
                         labelText: 'Phone number',
@@ -391,6 +476,7 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                     child: TextFormField(
                       controller: _ageController,
+                      enabled: !isBusy,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                         labelText: 'Age',
@@ -415,16 +501,16 @@ class _EmployeeBasicInfoPageState extends State<EmployeeBasicInfoPage>
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _isFormComplete && !_isLoading ? _handleContinue : null,
+                      onPressed: _isFormComplete && !isBusy ? _handleContinue : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navyBg,
                         disabledBackgroundColor: AppColors.navyBg.withOpacity(0.45),
                         shape: const StadiumBorder(),
                       ),
-                      child: _isLoading
+                      child: isBusy
                           ? const CircularProgressIndicator()
                           : Text(
-                              'Continue',
+                              widget.isEditing ? 'Save changes' : 'Continue',
                               style: AppTextStyles.buttonLabel(color: AppColors.coralAccent),
                             ),
                     ),
