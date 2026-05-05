@@ -1,15 +1,20 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../services/job_service.dart';
+import '../widgets/job_card.dart';
+import 'post_job_screen.dart';
 
-class EmployerJobsPage extends StatelessWidget {
+class EmployerJobsPage extends StatefulWidget {
   const EmployerJobsPage({super.key});
 
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Job posting coming soon')));
-  }
+  @override
+  State<EmployerJobsPage> createState() => _EmployerJobsPageState();
+}
+
+class _EmployerJobsPageState extends State<EmployerJobsPage> {
+  final JobService _jobService = JobService();
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +46,14 @@ class EmployerJobsPage extends StatelessWidget {
               SizedBox(
                 height: AppSpacing.buttonHeight,
                 child: ElevatedButton(
-                  onPressed: () => _showComingSoon(context),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PostJobScreen(),
+                      ),
+                    );
+                  },
                   style: AppButtonStyles.primary(
                     foregroundColor: AppColors.navyBg,
                   ),
@@ -52,7 +64,31 @@ class EmployerJobsPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const _EmployerJobsPlaceholderCard(),
+              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _jobService.getOpenJobs(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return _ErrorCard(error: snapshot.error.toString());
+                  }
+
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const _LoadingCard();
+                  }
+
+                  final jobs = snapshot.data?.docs ?? [];
+
+                  if (jobs.isEmpty) {
+                    return const _EmptyCard();
+                  }
+
+                  return Column(
+                    children: jobs.map((doc) {
+                      final job = doc.data();
+                      return JobCard(job: job);
+                    }).toList(),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -61,8 +97,30 @@ class EmployerJobsPage extends StatelessWidget {
   }
 }
 
-class _EmployerJobsPlaceholderCard extends StatelessWidget {
-  const _EmployerJobsPlaceholderCard();
+class _LoadingCard extends StatelessWidget {
+  const _LoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.coralAccent),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyCard extends StatelessWidget {
+  const _EmptyCard();
 
   @override
   Widget build(BuildContext context) {
@@ -75,72 +133,73 @@ class _EmployerJobsPlaceholderCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          _EmployerJobsIcon(),
-          SizedBox(height: 18),
-          Text(
-            'Your job posts will appear here',
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.coralAccent.withOpacity(0.16),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.work_outline_rounded,
+              color: AppColors.coralAccent,
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'No jobs available yet',
             style: TextStyle(
               color: AppColors.white,
               fontSize: 20,
               fontWeight: FontWeight.w700,
             ),
+            textAlign: TextAlign.center,
           ),
-          SizedBox(height: 10),
-          Text(
-            'This space will help you manage every role your business opens.',
+          const SizedBox(height: 10),
+          const Text(
+            'Create your first job post to get started.',
             style: AppTextStyles.body,
+            textAlign: TextAlign.center,
           ),
-          SizedBox(height: 20),
-          _FutureHint(label: 'Active jobs'),
-          _FutureHint(label: 'Urgent jobs'),
-          _FutureHint(label: 'Edit job posts'),
-          _FutureHint(label: 'Close filled jobs'),
         ],
       ),
     );
   }
 }
 
-class _EmployerJobsIcon extends StatelessWidget {
-  const _EmployerJobsIcon();
+class _ErrorCard extends StatelessWidget {
+  const _ErrorCard({required this.error});
+
+  final String error;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 52,
-      height: 52,
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: AppColors.coralAccent.withOpacity(0.16),
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
       ),
-      child: const Icon(
-        Icons.work_outline_rounded,
-        color: AppColors.coralAccent,
-      ),
-    );
-  }
-}
-
-class _FutureHint extends StatelessWidget {
-  const _FutureHint({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.check_circle_outline_rounded,
-            color: AppColors.coralAccent,
-            size: 18,
+          const Icon(Icons.error_outline, color: Colors.red, size: 48),
+          const SizedBox(height: 18),
+          const Text(
+            'Failed to load jobs',
+            style: TextStyle(
+              color: AppColors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(width: 10),
-          Text(label, style: AppTextStyles.label),
+          const SizedBox(height: 10),
+          Text(error, style: AppTextStyles.body, textAlign: TextAlign.center),
         ],
       ),
     );

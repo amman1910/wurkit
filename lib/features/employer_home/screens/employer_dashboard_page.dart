@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../applications/screens/employer_applications_page.dart';
+import '../../jobs/screens/post_job_screen.dart';
 
 class EmployerDashboardPage extends StatelessWidget {
   const EmployerDashboardPage({super.key});
-
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Job posting coming soon')));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,12 +82,63 @@ class EmployerDashboardPage extends StatelessWidget {
                     SizedBox(
                       height: AppSpacing.buttonHeight,
                       child: ElevatedButton(
-                        onPressed: () => _showComingSoon(context),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PostJobScreen(),
+                            ),
+                          );
+                        },
                         style: AppButtonStyles.primary(
                           foregroundColor: AppColors.navyBg,
                         ),
                         child: Text(
                           'Create job post',
+                          style: AppTextStyles.buttonLabel(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _EmployerCard(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Job applications',
+                      style: TextStyle(
+                        color: AppColors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Review incoming job applications from workers.',
+                      style: AppTextStyles.body,
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      height: AppSpacing.buttonHeight,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const EmployerApplicationsPage(),
+                            ),
+                          );
+                        },
+                        style: AppButtonStyles.primary(
+                          foregroundColor: AppColors.navyBg,
+                        ),
+                        child: Text(
+                          'View applications',
                           style: AppTextStyles.buttonLabel(),
                         ),
                       ),
