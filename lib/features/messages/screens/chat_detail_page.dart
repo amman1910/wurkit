@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../jobs/screens/job_details_page.dart';
 import '../services/chat_service.dart';
 
 class ChatDetailPage extends StatefulWidget {
@@ -208,66 +209,98 @@ class _ChatHeader extends StatelessWidget {
     final otherName = chatService.getOtherParticipantName(chat);
     final otherImage = chatService.getOtherParticipantImage(chat);
     final jobTitle = chat['jobTitle'] as String? ?? 'Matched job';
+    final jobId = chat['jobId'] as String?;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 10, 18, 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.96),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openJobDetails(context, jobId),
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
-        border: const Border(bottom: BorderSide(color: AppColors.border)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.16),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: AppColors.white),
-          ),
-          _HeaderAvatar(imageUrl: otherImage, name: otherName),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  otherName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  jobTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.label.copyWith(
-                    color: AppColors.coralAccent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                const Text(
-                  'Matched conversation',
-                  style: TextStyle(
-                    color: AppColors.lightText,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(8, 10, 18, 16),
+          decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: 0.96),
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(24),
             ),
+            border: const Border(bottom: BorderSide(color: AppColors.border)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.16),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-        ],
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back, color: AppColors.white),
+              ),
+              _HeaderAvatar(imageUrl: otherImage, name: otherName),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      otherName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      jobTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.coralAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    const Text(
+                      'Matched conversation',
+                      style: TextStyle(
+                        color: AppColors.lightText,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.lightText,
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openJobDetails(BuildContext context, String? jobId) {
+    if (jobId == null || jobId.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Job details are not available')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JobDetailsPage(jobId: jobId, openedFromChat: true),
       ),
     );
   }
