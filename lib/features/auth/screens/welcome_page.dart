@@ -30,11 +30,12 @@ class WelcomePage extends StatelessWidget {
               const SizedBox(height: AppSpacing.small),
 
               // App Name
-              Text(
-                'Wurkit',
-                style: AppTextStyles.heading(
-                  color: AppColors.coralAccent,
-                  fontSize: 70,
+              SizedBox(
+                width: double.infinity,
+                height: 125,
+                child: Image.asset(
+                  'assets/images/wurkit_retro_header.png',
+                  fit: BoxFit.contain,
                 ),
               ),
 
