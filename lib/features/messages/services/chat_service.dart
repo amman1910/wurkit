@@ -149,6 +149,107 @@ class ChatService {
     });
   }
 
+  Future<String> getOrCreateChatForApprovedApplication({
+    required String jobId,
+    required String employeeId,
+    required String employerId,
+  }) async {
+    final existingChat = await _firestore
+        .collection('chats')
+        .where('jobId', isEqualTo: jobId)
+        .where('employeeId', isEqualTo: employeeId)
+        .where('employerId', isEqualTo: employerId)
+        .limit(1)
+        .get();
+
+    if (existingChat.docs.isNotEmpty) {
+      final data = existingChat.docs.first.data();
+      return _readString(data, 'chatId', existingChat.docs.first.id);
+    }
+
+    final jobDoc = await _firestore.collection('jobs').doc(jobId).get();
+    final employeeProfileDoc = await _firestore
+        .collection('employeeProfiles')
+        .doc(employeeId)
+        .get();
+    final employerProfileDoc = await _firestore
+        .collection('employerProfiles')
+        .doc(employerId)
+        .get();
+    final applicationSnapshot = await _firestore
+        .collection('applications')
+        .where('jobId', isEqualTo: jobId)
+        .where('employeeId', isEqualTo: employeeId)
+        .where('employerId', isEqualTo: employerId)
+        .limit(1)
+        .get();
+
+    final jobData = jobDoc.data();
+    final employeeProfileData = employeeProfileDoc.data();
+    final employerProfileData = employerProfileDoc.data();
+    final applicationData = applicationSnapshot.docs.isEmpty
+        ? null
+        : applicationSnapshot.docs.first.data();
+
+    final employeeName = _readString(
+      applicationData,
+      'employeeName',
+      _readString(employeeProfileData, 'name', 'Worker'),
+    );
+    final employeeImageUrl = _readString(
+      employeeProfileData,
+      'profileImageUrl',
+      '',
+    );
+    final employerName = _readString(
+      employerProfileData,
+      'businessName',
+      'Business',
+    );
+    final employerImageUrl = _readString(
+      employerProfileData,
+      'businessLogoUrl',
+      '',
+    );
+    final jobTitle = _readString(
+      applicationData,
+      'jobTitle',
+      _readString(jobData, 'title', _readString(jobData, 'jobTitle', 'Job')),
+    );
+
+    final chatRef = _firestore.collection('chats').doc();
+    await chatRef.set({
+      'chatId': chatRef.id,
+      'applicationId': applicationSnapshot.docs.isEmpty
+          ? null
+          : applicationSnapshot.docs.first.id,
+      'jobId': jobId,
+      'employeeId': employeeId,
+      'employerId': employerId,
+      'participants': [employeeId, employerId],
+      'participantIds': [employeeId, employerId],
+      'participantNames': {employeeId: employeeName, employerId: employerName},
+      'participantImages': {
+        employeeId: employeeImageUrl,
+        employerId: employerImageUrl,
+      },
+      'employeeName': employeeName,
+      'employeeImageUrl': employeeImageUrl,
+      'employerName': employerName,
+      'employerImageUrl': employerImageUrl,
+      'jobTitle': jobTitle,
+      'lastMessage': '',
+      'lastMessageAt': null,
+      'lastMessageSenderId': null,
+      'unreadCounts': {employeeId: 0, employerId: 0},
+      'isActive': true,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    return chatRef.id;
+  }
+
   String getOtherParticipantId(Map<String, dynamic> chat) {
     final currentUser = _auth.currentUser;
     final participants = _readStringList(chat['participants']);
