@@ -4,6 +4,7 @@ import '../../../core/theme/app_ui.dart';
 import '../../applications/screens/employee_applications_page.dart';
 import '../../employee_profile/screens/employee_profile_page.dart';
 import '../../jobs/screens/employee_jobs_page.dart';
+import '../../jobs/screens/job_details_page.dart';
 import '../services/employee_home_service.dart';
 
 class EmployeeHomePage extends StatefulWidget {
@@ -90,10 +91,10 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
     );
   }
 
-  void _showJobDetailsPlaceholder() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Job details coming soon')));
+  void _openJobDetails(EmployeeHomeJob job) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => JobDetailsPage(jobId: job.id)),
+    );
   }
 
   void _openPage(Widget page) {
@@ -169,7 +170,7 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
                     profile: profile,
                     jobsStream: _openJobsStream,
                     employerPreviewFor: _employerPreviewFor,
-                    onJobTap: _showJobDetailsPlaceholder,
+                    onJobTap: _openJobDetails,
                   ),
                 ],
               ),
@@ -563,7 +564,7 @@ class _JobsHomeContent extends StatelessWidget {
   final EmployeeHomeProfile profile;
   final Stream<List<EmployeeHomeJob>> jobsStream;
   final Future<EmployerPreview?> Function(String employerId) employerPreviewFor;
-  final VoidCallback onJobTap;
+  final ValueChanged<EmployeeHomeJob> onJobTap;
 
   @override
   Widget build(BuildContext context) {
@@ -625,7 +626,7 @@ class _JobsContentScaffold extends StatelessWidget {
   final List<EmployeeHomeJob> jobs;
   final bool isLoading;
   final Future<EmployerPreview?> Function(String employerId) employerPreviewFor;
-  final VoidCallback onJobTap;
+  final ValueChanged<EmployeeHomeJob> onJobTap;
 
   @override
   Widget build(BuildContext context) {
@@ -779,7 +780,7 @@ class _RecommendedJobsSection extends StatelessWidget {
   final List<EmployeeHomeJob> jobs;
   final bool isLoading;
   final Future<EmployerPreview?> Function(String employerId) employerPreviewFor;
-  final VoidCallback onJobTap;
+  final ValueChanged<EmployeeHomeJob> onJobTap;
 
   @override
   Widget build(BuildContext context) {
@@ -812,7 +813,7 @@ class _RecommendedJobsSection extends StatelessWidget {
                     employerPreviewFuture: employerPreviewFor(
                       jobs[index].employerId,
                     ),
-                    onTap: onJobTap,
+                    onTap: () => onJobTap(jobs[index]),
                   ),
                 );
               },
@@ -832,7 +833,7 @@ class _UrgentJobsSection extends StatelessWidget {
 
   final List<EmployeeHomeJob> jobs;
   final Future<EmployerPreview?> Function(String employerId) employerPreviewFor;
-  final VoidCallback onJobTap;
+  final ValueChanged<EmployeeHomeJob> onJobTap;
 
   @override
   Widget build(BuildContext context) {
@@ -845,7 +846,7 @@ class _UrgentJobsSection extends StatelessWidget {
           _UrgentJobTile(
             job: job,
             employerPreviewFuture: employerPreviewFor(job.employerId),
-            onTap: onJobTap,
+            onTap: () => onJobTap(job),
           ),
           if (job != jobs.last) const SizedBox(height: 10),
         ],
