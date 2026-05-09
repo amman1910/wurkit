@@ -1,9 +1,15 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
 import '../../applications/screens/employee_applications_page.dart';
 import '../../employee_profile/screens/employee_profile_page.dart';
 import '../../jobs/screens/employee_jobs_page.dart';
+import '../../matches/services/match_service.dart';
+import '../../matches/widgets/match_celebration_dialog.dart';
+import '../../messages/screens/chat_detail_page.dart';
 import '../../messages/screens/messages_page.dart';
 import '../../messages/services/chat_service.dart';
 import 'employee_home_page.dart';
@@ -19,7 +25,11 @@ class EmployeeMainNavigationPage extends StatefulWidget {
 class _EmployeeMainNavigationPageState
     extends State<EmployeeMainNavigationPage> {
   final ChatService _chatService = ChatService();
+  final MatchService _matchService = MatchService();
+  final Set<String> _handledMatchIds = {};
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _matchSubscription;
   int _selectedIndex = 0;
+  bool _isShowingMatchDialog = false;
 
   static const List<Widget> _pages = <Widget>[
     EmployeeHomePage(),
@@ -28,6 +38,173 @@ class _EmployeeMainNavigationPageState
     MessagesPage(role: 'employee'),
     EmployeeProfilePage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _matchSubscription = _matchService.watchUnseenEmployeeMatches().listen(
+      _handleUnseenMatches,
+      onError: (_) {},
+    );
+  }
+
+  @override
+  void dispose() {
+    _matchSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleUnseenMatches(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) async {
+    if (_isShowingMatchDialog || !mounted) {
+      return;
+    }
+
+    final docs = [...snapshot.docs];
+    docs.sort((a, b) {
+      return _readTimestampMillis(
+        b.data()['createdAt'],
+      ).compareTo(_readTimestampMillis(a.data()['createdAt']));
+    });
+
+    QueryDocumentSnapshot<Map<String, dynamic>>? nextMatch;
+    for (final doc in docs) {
+      if (!_handledMatchIds.contains(doc.id)) {
+        nextMatch = doc;
+        break;
+      }
+    }
+
+    if (nextMatch == null) {
+      return;
+    }
+
+    _handledMatchIds.add(nextMatch.id);
+    _isShowingMatchDialog = true;
+
+    try {
+      final data = await _matchService.getMatchCelebrationData(nextMatch.id);
+      if (!mounted) {
+        return;
+      }
+
+      if (data == null) {
+        await _matchService.markMatchSeen(nextMatch.id);
+        return;
+      }
+
+      await _showMatchCelebration(data);
+    } catch (_) {
+      if (mounted) {
+        _handledMatchIds.remove(nextMatch.id);
+      }
+    } finally {
+      if (mounted) {
+        _isShowingMatchDialog = false;
+      }
+    }
+  }
+
+  Future<void> _showMatchCelebration(Map<String, dynamic> data) async {
+    final matchId = data['matchId'] as String?;
+    final chatId = data['chatId'] as String?;
+    if (matchId == null || matchId.trim().isEmpty) {
+      return;
+    }
+
+    var actionHandled = false;
+
+    Future<void> closeDialog(NavigatorState dialogNavigator) async {
+      if (dialogNavigator.canPop()) {
+        dialogNavigator.pop();
+      }
+    }
+
+    Future<void> markAndClose(
+      BuildContext dialogContext, {
+      required bool openChat,
+    }) async {
+      if (actionHandled) {
+        return;
+      }
+      actionHandled = true;
+      final dialogNavigator = Navigator.of(dialogContext, rootNavigator: true);
+
+      try {
+        await _matchService.markMatchSeen(matchId);
+      } catch (_) {}
+
+      if (!mounted) {
+        return;
+      }
+
+      await closeDialog(dialogNavigator);
+
+      if (!mounted || !openChat) {
+        return;
+      }
+
+      if (chatId == null || chatId.trim().isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Chat coming soon')));
+        return;
+      }
+
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => ChatDetailPage(chatId: chatId)));
+    }
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: 'Match celebration',
+      barrierColor: Colors.black.withValues(alpha: 0.66),
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return MatchCelebrationDialog(
+          businessName: _readString(data['businessName'], 'Business'),
+          businessLogoUrl: _readNullableString(data['businessLogoUrl']),
+          jobTitle: _readString(data['jobTitle'], 'Job'),
+          date: _readNullableString(data['date']),
+          shiftStart: _readNullableString(data['shiftStart']),
+          shiftEnd: _readNullableString(data['shiftEnd']),
+          location:
+              _readNullableString(data['city']) ??
+              _readNullableString(data['location']) ??
+              _readNullableString(data['businessAddress']),
+          onOpenChat: () => markAndClose(dialogContext, openChat: true),
+          onMaybeLater: () => markAndClose(dialogContext, openChat: false),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+    );
+  }
+
+  int _readTimestampMillis(Object? value) {
+    if (value is Timestamp) {
+      return value.millisecondsSinceEpoch;
+    }
+    return 0;
+  }
+
+  String _readString(Object? value, String fallback) {
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+    return fallback;
+  }
+
+  String? _readNullableString(Object? value) {
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
