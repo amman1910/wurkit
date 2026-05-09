@@ -261,6 +261,8 @@ class ApplicationService {
         'jobTitle': jobTitle,
         'chatId': chatRef.id,
         'status': 'active',
+        'seenByEmployee': false,
+        'seenByEmployeeAt': null,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
