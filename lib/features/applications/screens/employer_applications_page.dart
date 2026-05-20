@@ -7,7 +7,10 @@ import '../../../core/theme/app_ui.dart';
 import '../services/application_service.dart';
 
 class EmployerApplicationsPage extends StatefulWidget {
-  const EmployerApplicationsPage({super.key});
+  const EmployerApplicationsPage({super.key, this.jobId, this.jobTitle});
+
+  final String? jobId;
+  final String? jobTitle;
 
   @override
   State<EmployerApplicationsPage> createState() =>
@@ -104,17 +107,21 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Applications',
-                style: TextStyle(
+              Text(
+                widget.jobTitle == null
+                    ? 'Applications'
+                    : 'Applications for ${widget.jobTitle}',
+                style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Review workers who applied to your jobs.',
+              Text(
+                widget.jobId == null
+                    ? 'Review workers who applied to your jobs.'
+                    : 'Review workers who applied to this job.',
                 style: AppTextStyles.body,
               ),
               const SizedBox(height: 18),
@@ -130,9 +137,14 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
               const SizedBox(height: 24),
               Expanded(
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: _applicationService.getApplicationsForEmployer(
-                    currentUser.uid,
-                  ),
+                  stream: widget.jobId == null || widget.jobId!.trim().isEmpty
+                      ? _applicationService.getApplicationsForEmployer(
+                          currentUser.uid,
+                        )
+                      : _applicationService.getApplicationsForEmployerJob(
+                          employerId: currentUser.uid,
+                          jobId: widget.jobId!,
+                        ),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return _ApplicationsErrorView(
