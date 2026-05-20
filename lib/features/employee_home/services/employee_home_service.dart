@@ -184,8 +184,8 @@ class EmployeeHomeJob {
       employerId: _readString(data['employerId']) ?? '',
       title: _readString(data['title']) ?? 'Open shift',
       description: _readString(data['description']),
-      location: _readString(data['location']),
-      salary: _readDouble(data['salary']),
+      location: _readLocation(data['location']),
+      salary: _readDouble(data['salaryAmount']) ?? _readDouble(data['salary']),
       salaryType: _readString(data['salaryType']),
       urgent: _readBool(data['urgent']) ?? false,
     );
@@ -241,5 +241,24 @@ double? _readDouble(Object? value) {
   if (value is num) {
     return value.toDouble();
   }
+  return null;
+}
+
+String? _readLocation(Object? value) {
+  if (value is String) {
+    return _readString(value);
+  }
+
+  if (value is Map) {
+    if (value['type'] == 'remote') {
+      return 'Remote';
+    }
+    final parts = [
+      _readString(value['address']),
+      _readString(value['city']),
+    ].whereType<String>().toList();
+    return parts.isEmpty ? null : parts.join(', ');
+  }
+
   return null;
 }
