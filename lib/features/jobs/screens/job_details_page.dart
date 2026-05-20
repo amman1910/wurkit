@@ -337,7 +337,7 @@ class _JobHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = employer?.businessLogoUrl;
+    final imageUrl = job.imageUrl ?? employer?.businessLogoUrl;
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
@@ -596,7 +596,7 @@ class _InfoChipGrid extends StatelessWidget {
             right: _InfoTile(
               icon: Icons.auto_awesome_rounded,
               label: 'Skill',
-              value: job.requiredSkill ?? 'General help',
+              value: job.skillsText ?? job.jobCategory ?? 'General help',
             ),
           ),
           const _InfoHorizontalDivider(),
@@ -1455,9 +1455,13 @@ class _JobDetails {
     this.date,
     this.salary,
     this.salaryType,
+    this.jobCategory,
+    this.requiredSkills = const [],
     this.requiredSkill,
     this.shiftStart,
     this.shiftEnd,
+    this.shifts = const [],
+    this.imageUrl,
   });
 
   final String id;
@@ -1470,9 +1474,13 @@ class _JobDetails {
   final String? date;
   final double? salary;
   final String? salaryType;
+  final String? jobCategory;
+  final List<String> requiredSkills;
   final String? requiredSkill;
   final String? shiftStart;
   final String? shiftEnd;
+  final List<String> shifts;
+  final String? imageUrl;
 
   String? get salaryText {
     if (salary == null) {
@@ -1483,11 +1491,27 @@ class _JobDetails {
     final formatted = amount == amount.roundToDouble()
         ? amount.toStringAsFixed(0)
         : amount.toStringAsFixed(2);
-    final type = salaryType == null ? '' : ' $salaryType';
-    return '\$$formatted$type';
+    final type = salaryType == 'Hourly'
+        ? ' / hour'
+        : salaryType == 'Daily'
+        ? ' / day'
+        : salaryType == null
+        ? ''
+        : ' $salaryType';
+    return '₪$formatted$type';
+  }
+
+  String? get skillsText {
+    if (requiredSkills.isNotEmpty) {
+      return requiredSkills.join(', ');
+    }
+    return requiredSkill;
   }
 
   String? get shiftText {
+    if (shifts.isNotEmpty) {
+      return shifts.join(', ');
+    }
     if (shiftStart == null && shiftEnd == null) {
       return null;
     }
@@ -1511,13 +1535,17 @@ class _JobDetails {
       status: _readString(data['status']) ?? 'open',
       urgent: _readBool(data['urgent']) ?? false,
       description: _readString(data['description']),
-      location: _readString(data['location']),
-      date: _readDate(data['date']),
-      salary: _readDouble(data['salary']),
+      location: _readLocation(data['location']),
+      date: _readJobDate(data),
+      salary: _readDouble(data['salaryAmount']) ?? _readDouble(data['salary']),
       salaryType: _readString(data['salaryType']),
+      jobCategory: _readString(data['jobCategory']),
+      requiredSkills: _readStringList(data['requiredSkills']),
       requiredSkill: _readString(data['requiredSkill']),
       shiftStart: _readString(data['shiftStart']),
       shiftEnd: _readString(data['shiftEnd']),
+      shifts: _readShifts(data['shifts']),
+      imageUrl: _readFirstString(data['imageUrls']),
     );
   }
 }
@@ -1601,6 +1629,92 @@ String? _readDate(Object? value) {
     return '${date.month}/${date.day}/${date.year}';
   }
   return _readString(value);
+}
+
+String? _readJobDate(Map<String, dynamic> data) {
+  if (data['startAsSoonAsPossible'] == true) {
+    return 'ASAP';
+  }
+
+  final start = data['startDate'];
+  final end = data['endDate'];
+  if (start is Timestamp && end is Timestamp) {
+    return '${_readDate(start)} - ${_readDate(end)}';
+  }
+  if (start is Timestamp) {
+    return _readDate(start);
+  }
+  return _readDate(data['date']);
+}
+
+String? _readLocation(Object? value) {
+  if (value is String) {
+    return _readString(value);
+  }
+
+  if (value is Map) {
+    if (value['type'] == 'remote') {
+      return 'Remote';
+    }
+    final parts = [
+      _readString(value['address']),
+      _readString(value['city']),
+    ].whereType<String>().toList();
+    if (parts.isNotEmpty) {
+      return parts.join(', ');
+    }
+  }
+
+  return null;
+}
+
+List<String> _readStringList(Object? value) {
+  if (value is! List) {
+    return const [];
+  }
+
+  return value
+      .whereType<String>()
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
+}
+
+List<String> _readShifts(Object? value) {
+  if (value is! List) {
+    return const [];
+  }
+
+  return value
+      .whereType<Map>()
+      .map((shift) {
+        final start = _readString(shift['startTime']);
+        final end = _readString(shift['endTime']);
+        if (start == null && end == null) {
+          return null;
+        }
+        if (start == null) {
+          return end;
+        }
+        if (end == null) {
+          return start;
+        }
+        return '$start - $end';
+      })
+      .whereType<String>()
+      .toList();
+}
+
+String? _readFirstString(Object? value) {
+  if (value is List) {
+    for (final item in value) {
+      final text = _readString(item);
+      if (text != null) {
+        return text;
+      }
+    }
+  }
+  return null;
 }
 
 bool? _readBool(Object? value) {
