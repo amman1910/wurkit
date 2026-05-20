@@ -131,6 +131,18 @@ class ApplicationService {
         .snapshots();
   }
 
+  Stream<QuerySnapshot<Map<String, dynamic>>> getApplicationsForEmployerJob({
+    required String employerId,
+    required String jobId,
+  }) {
+    return _firestore
+        .collection('applications')
+        .where('employerId', isEqualTo: employerId)
+        .where('jobId', isEqualTo: jobId)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
   Future<void> updateApplicationStatus({
     required String applicationId,
     required String status,
