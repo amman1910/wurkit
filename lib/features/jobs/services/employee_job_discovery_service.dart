@@ -106,19 +106,21 @@ class EmployeeJobDiscoveryService {
       return;
     }
 
-    final employeeName = await _loadEmployeeName(user.uid);
-    final body = employeeName == null
-        ? 'A worker applied for ${job.title}'
-        : '$employeeName applied for ${job.title}';
+    final employeeProfile = await _loadEmployeeNotificationProfile(user);
+    final employeeName = employeeProfile.name ?? 'A worker';
+    final jobTitle = _readString(job.title) ?? 'your job';
+    final body = '$employeeName applied for $jobTitle';
 
     await _notificationService.createNotification(
       userId: job.employerId,
       type: 'application_created',
-      title: 'New application',
+      title: 'New application received',
       body: body,
       relatedJobId: job.id,
       relatedApplicationId: applicationRef.id,
       senderId: user.uid,
+      senderName: employeeProfile.name,
+      senderImageUrl: employeeProfile.imageUrl,
     );
   }
 
@@ -189,16 +191,41 @@ class EmployeeJobDiscoveryService {
     return employers;
   }
 
-  Future<String?> _loadEmployeeName(String employeeId) async {
+  Future<_EmployeeNotificationProfile> _loadEmployeeNotificationProfile(
+    User user,
+  ) async {
     final snapshot = await _firestore
         .collection('employeeProfiles')
-        .doc(employeeId)
+        .doc(user.uid)
         .get();
     final data = snapshot.data();
-    return _readString(data?['name']) ??
+    final firstName = _readString(data?['firstName']);
+    final lastName = _readString(data?['lastName']);
+    final combinedName = [firstName, lastName].whereType<String>().join(' ');
+
+    final name =
         _readString(data?['fullName']) ??
-        _readString(_auth.currentUser?.displayName);
+        _readString(data?['name']) ??
+        _readString(data?['displayName']) ??
+        _readString(combinedName) ??
+        _readString(user.displayName);
+
+    final imageUrl =
+        _readString(data?['profileImageUrl']) ??
+        _readString(data?['imageUrl']) ??
+        _readString(data?['photoUrl']) ??
+        _readString(data?['avatarUrl']) ??
+        _readString(user.photoURL);
+
+    return _EmployeeNotificationProfile(name: name, imageUrl: imageUrl);
   }
+}
+
+class _EmployeeNotificationProfile {
+  const _EmployeeNotificationProfile({this.name, this.imageUrl});
+
+  final String? name;
+  final String? imageUrl;
 }
 
 String? _readString(Object? value) {
