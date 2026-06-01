@@ -23,6 +23,8 @@ class NotificationService {
     String? relatedApplicationId,
     String? relatedChatId,
     String? senderId,
+    String? senderName,
+    String? senderImageUrl,
   }) async {
     final trimmedUserId = userId.trim();
     final trimmedType = type.trim();
@@ -67,6 +69,8 @@ class NotificationService {
       'relatedApplicationId': _trimOrNull(relatedApplicationId),
       'relatedChatId': _trimOrNull(relatedChatId),
       'senderId': _trimOrNull(senderId),
+      'senderName': _trimOrNull(senderName),
+      'senderImageUrl': _trimOrNull(senderImageUrl),
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
