@@ -172,7 +172,7 @@ class _EmployerMainNavigationPageState
     debugPrint(
       'EmployerMainNavigationPage: message banner state set eventKey=$eventKey',
     );
-    _bannerTimer = Timer(const Duration(seconds: 4), _dismissBanner);
+    _bannerTimer = Timer(const Duration(seconds: 7), _dismissBanner);
   }
 
   void _handleNotificationSnapshot(AppNotification? notification) {
@@ -225,11 +225,12 @@ class _EmployerMainNavigationPageState
     _bannerTimer?.cancel();
     setState(() {
       _activeNotification = notification;
+      _activeMessageNotification = null;
     });
     debugPrint(
       'EmployerMainNavigationPage: banner state set id=${notification.id}',
     );
-    _bannerTimer = Timer(const Duration(seconds: 4), _dismissBanner);
+    _bannerTimer = Timer(const Duration(seconds: 7), _dismissBanner);
   }
 
   void _dismissBanner() {
@@ -267,6 +268,14 @@ class _EmployerMainNavigationPageState
         ),
       );
     }
+  }
+
+  String _applicationBannerTitle(AppNotification notification) {
+    final title = notification.title.trim();
+    if (title.isEmpty || title == 'New application') {
+      return 'New application received';
+    }
+    return title;
   }
 
   void _openMessageNotification(MessageBannerNotification notification) {
@@ -388,9 +397,12 @@ class _EmployerMainNavigationPageState
             left: 0,
             right: 0,
             child: InAppNotificationBanner(
-              title: _activeNotification!.title,
+              title: _applicationBannerTitle(_activeNotification!),
               body: _activeNotification!.body,
-              icon: Icons.group_add_rounded,
+              avatarImageUrl: _activeNotification!.senderImageUrl,
+              fallbackInitial: _activeNotification!.senderName,
+              fallbackIcon: Icons.person_rounded,
+              showWatermark: false,
               onTap: () => _openNotification(_activeNotification!),
               onDismiss: _dismissBanner,
             ),
