@@ -138,7 +138,7 @@ class _EmployeeMainNavigationPageState
       'EmployeeMainNavigationPage: message banner state set eventKey=$eventKey',
     );
     _messageBannerTimer = Timer(
-      const Duration(seconds: 4),
+      const Duration(seconds: 7),
       _dismissMessageBanner,
     );
   }
