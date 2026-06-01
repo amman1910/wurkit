@@ -1,6 +1,34 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+class MessageBannerNotification {
+  const MessageBannerNotification({
+    required this.chatId,
+    required this.senderId,
+    required this.senderName,
+    required this.senderImageUrl,
+    required this.jobTitle,
+    required this.lastMessage,
+    required this.lastMessageAt,
+  });
+
+  final String chatId;
+  final String senderId;
+  final String senderName;
+  final String senderImageUrl;
+  final String jobTitle;
+  final String lastMessage;
+  final Timestamp? lastMessageAt;
+
+  String get eventKey {
+    final millis = lastMessageAt?.millisecondsSinceEpoch;
+    if (millis != null) {
+      return '${chatId}_${millis}_$senderId';
+    }
+    return '${chatId}_${lastMessage}_$senderId';
+  }
+}
+
 class ChatService {
   ChatService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
     : _auth = firebaseAuth ?? FirebaseAuth.instance,
@@ -56,6 +84,60 @@ class ChatService {
 
           chats.sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
           return chats;
+        });
+  }
+
+  Stream<MessageBannerNotification?> watchLatestUnreadIncomingMessage() {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      return Stream.value(null);
+    }
+
+    return _firestore
+        .collection('chats')
+        .where('participants', arrayContains: currentUser.uid)
+        .snapshots()
+        .map((snapshot) {
+          final incoming = <MessageBannerNotification>[];
+
+          for (final doc in snapshot.docs) {
+            final data = doc.data();
+            final unreadCounts = _readMap(data['unreadCounts']);
+            final unreadCount = _readInt(unreadCounts[currentUser.uid]);
+            final senderId = _readString(data, 'lastMessageSenderId', '');
+
+            if (unreadCount <= 0 ||
+                senderId.isEmpty ||
+                senderId == currentUser.uid) {
+              continue;
+            }
+
+            final participantNames = _readMap(data['participantNames']);
+            final participantImages = _readMap(data['participantImages']);
+
+            incoming.add(
+              MessageBannerNotification(
+                chatId: _readString(data, 'chatId', doc.id),
+                senderId: senderId,
+                senderName: _readString(participantNames, senderId, 'Someone'),
+                senderImageUrl: _readString(participantImages, senderId, ''),
+                jobTitle: _readString(data, 'jobTitle', ''),
+                lastMessage: _readString(data, 'lastMessage', ''),
+                lastMessageAt: _readTimestamp(data['lastMessageAt']),
+              ),
+            );
+          }
+
+          incoming.sort((a, b) {
+            final aTime = a.lastMessageAt?.millisecondsSinceEpoch ?? 0;
+            final bTime = b.lastMessageAt?.millisecondsSinceEpoch ?? 0;
+            return bTime.compareTo(aTime);
+          });
+
+          if (incoming.isEmpty) {
+            return null;
+          }
+          return incoming.first;
         });
   }
 
@@ -318,6 +400,20 @@ class ChatService {
       return timestamp.millisecondsSinceEpoch;
     }
 
+    return 0;
+  }
+
+  Timestamp? _readTimestamp(Object? value) {
+    return value is Timestamp ? value : null;
+  }
+
+  int _readInt(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
     return 0;
   }
 
