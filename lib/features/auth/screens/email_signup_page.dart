@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import '../../../core/theme/app_ui.dart';
 
 import '../services/auth_service.dart';
 import 'choose_profile_page.dart';
+
+// TEMPORARY DEVELOPMENT FLAG:
+// Set to false before production/demo release if real email verification is required.
+const bool kBypassEmailVerificationForDemo = true;
 
 class EmailSignupPage extends StatefulWidget {
   const EmailSignupPage({super.key});
@@ -75,10 +78,27 @@ class _EmailSignupPageState extends State<EmailSignupPage> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signUpWithEmail(
-        email: email,
-        password: password,
-      );
+      await _authService.signUpWithEmail(email: email, password: password);
+
+      if (kBypassEmailVerificationForDemo) {
+        if (!mounted) return;
+
+        setState(() => _isLoading = false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Demo mode: email verification skipped'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const ChooseProfilePage()),
+        );
+
+        return;
+      }
 
       if (mounted) {
         // Send verification email
@@ -123,6 +143,8 @@ class _EmailSignupPageState extends State<EmailSignupPage> {
   }
 
   Future<void> _resendVerificationEmail() async {
+    // TEMPORARY DEVELOPMENT NOTE:
+    // Used only when kBypassEmailVerificationForDemo is false.
     try {
       await _authService.sendCurrentUserEmailVerification();
       if (mounted) {
@@ -141,8 +163,12 @@ class _EmailSignupPageState extends State<EmailSignupPage> {
   }
 
   void _startVerificationPolling() {
+    // TEMPORARY DEVELOPMENT NOTE:
+    // Used only when kBypassEmailVerificationForDemo is false.
     _verificationTimer?.cancel(); // Ensure no duplicate timers
-    _verificationTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+    _verificationTimer = Timer.periodic(const Duration(seconds: 3), (
+      timer,
+    ) async {
       try {
         final isVerified = await _authService.reloadAndCheckEmailVerified();
         if (isVerified) {
@@ -186,10 +212,7 @@ class _EmailSignupPageState extends State<EmailSignupPage> {
               TextButton(
                 onPressed: _isLoading ? null : () => Navigator.pop(context),
                 style: AppButtonStyles.text(),
-                child: const Text(
-                  'Back',
-                  style: AppTextStyles.textButton,
-                ),
+                child: const Text('Back', style: AppTextStyles.textButton),
               ),
 
               const SizedBox(height: AppSpacing.field),
@@ -238,11 +261,15 @@ class _EmailSignupPageState extends State<EmailSignupPage> {
                   hint: '••••••••',
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                       color: Colors.white54,
                     ),
                     onPressed: !_isLoading
-                        ? () => setState(() => _obscurePassword = !_obscurePassword)
+                        ? () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          )
                         : null,
                   ),
                 ),
@@ -260,11 +287,16 @@ class _EmailSignupPageState extends State<EmailSignupPage> {
                   hint: '••••••••',
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                       color: Colors.white54,
                     ),
                     onPressed: !_isLoading
-                        ? () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword)
+                        ? () => setState(
+                            () => _obscureConfirmPassword =
+                                !_obscureConfirmPassword,
+                          )
                         : null,
                   ),
                 ),
@@ -294,7 +326,9 @@ class _EmailSignupPageState extends State<EmailSignupPage> {
                         )
                       : Text(
                           'Create account',
-                          style: AppTextStyles.buttonLabel(color: AppColors.navyBg),
+                          style: AppTextStyles.buttonLabel(
+                            color: AppColors.navyBg,
+                          ),
                         ),
                 ),
               ),
