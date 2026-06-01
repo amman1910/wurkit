@@ -11,6 +11,8 @@ class AppNotification {
     this.relatedApplicationId,
     this.relatedChatId,
     this.senderId,
+    required this.senderName,
+    required this.senderImageUrl,
     required this.isRead,
     this.createdAt,
   });
@@ -24,6 +26,8 @@ class AppNotification {
   final String? relatedApplicationId;
   final String? relatedChatId;
   final String? senderId;
+  final String senderName;
+  final String senderImageUrl;
   final bool isRead;
   final Timestamp? createdAt;
 
@@ -41,6 +45,8 @@ class AppNotification {
       relatedApplicationId: _readString(data['relatedApplicationId']),
       relatedChatId: _readString(data['relatedChatId']),
       senderId: _readString(data['senderId']),
+      senderName: _readString(data['senderName']) ?? '',
+      senderImageUrl: _readString(data['senderImageUrl']) ?? '',
       isRead: data['isRead'] == true,
       createdAt: data['createdAt'] is Timestamp
           ? data['createdAt'] as Timestamp
@@ -58,6 +64,8 @@ class AppNotification {
       'relatedApplicationId': relatedApplicationId,
       'relatedChatId': relatedChatId,
       'senderId': senderId,
+      'senderName': senderName,
+      'senderImageUrl': senderImageUrl,
       'isRead': isRead,
       'createdAt': createdAt ?? FieldValue.serverTimestamp(),
     };
