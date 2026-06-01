@@ -14,6 +14,7 @@ class InAppNotificationBanner extends StatelessWidget {
     this.fallbackInitial,
     this.fallbackIcon,
     this.showAccentDot = true,
+    this.showWatermark = true,
   });
 
   final String title;
@@ -25,6 +26,7 @@ class InAppNotificationBanner extends StatelessWidget {
   final String? fallbackInitial;
   final IconData? fallbackIcon;
   final bool showAccentDot;
+  final bool showWatermark;
 
   @override
   Widget build(BuildContext context) {
@@ -86,19 +88,20 @@ class InAppNotificationBanner extends StatelessWidget {
                       bottom: -42,
                       child: _GlowSpot(size: 110, opacity: 0.06),
                     ),
-                    Positioned(
-                      right: 34,
-                      top: 5,
-                      child: Text(
-                        'W',
-                        style: TextStyle(
-                          color: AppColors.white.withValues(alpha: 0.035),
-                          fontSize: 96,
-                          fontWeight: FontWeight.w900,
-                          height: 1,
+                    if (showWatermark)
+                      Positioned(
+                        right: 34,
+                        top: 5,
+                        child: Text(
+                          'W',
+                          style: TextStyle(
+                            color: AppColors.white.withValues(alpha: 0.035),
+                            fontSize: 96,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                          ),
                         ),
                       ),
-                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
