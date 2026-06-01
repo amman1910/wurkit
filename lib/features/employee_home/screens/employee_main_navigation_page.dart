@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
 import '../../applications/screens/employee_applications_page.dart';
+import '../../applications/services/employee_application_service.dart';
 import '../../employee_profile/screens/employee_profile_page.dart';
 import '../../jobs/screens/employee_jobs_page.dart';
 import '../../matches/services/match_service.dart';
@@ -12,6 +13,7 @@ import '../../matches/widgets/match_celebration_dialog.dart';
 import '../../messages/screens/chat_detail_page.dart';
 import '../../messages/screens/messages_page.dart';
 import '../../messages/services/chat_service.dart';
+import '../../notifications/widgets/in_app_notification_banner.dart';
 import 'employee_home_page.dart';
 
 class EmployeeMainNavigationPage extends StatefulWidget {
@@ -26,8 +28,16 @@ class _EmployeeMainNavigationPageState
     extends State<EmployeeMainNavigationPage> {
   final ChatService _chatService = ChatService();
   final MatchService _matchService = MatchService();
+  final EmployeeApplicationService _applicationService =
+      EmployeeApplicationService();
   final Set<String> _handledMatchIds = {};
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _matchSubscription;
+  StreamSubscription<MessageBannerNotification?>? _messageSubscription;
+  Timer? _messageBannerTimer;
+  MessageBannerNotification? _activeMessageNotification;
+  bool _messageListenerInitialized = false;
+  String? _lastSeenMessageKey;
+  String? _lastShownMessageKey;
   int _selectedIndex = 0;
   bool _isShowingMatchDialog = false;
 
@@ -46,12 +56,116 @@ class _EmployeeMainNavigationPageState
       _handleUnseenMatches,
       onError: (_) {},
     );
+    _startMessageListener();
   }
 
   @override
   void dispose() {
     _matchSubscription?.cancel();
+    _messageSubscription?.cancel();
+    _messageBannerTimer?.cancel();
     super.dispose();
+  }
+
+  void _startMessageListener() {
+    debugPrint('EmployeeMainNavigationPage: message listener started');
+
+    _messageSubscription?.cancel();
+    _messageListenerInitialized = false;
+    _lastSeenMessageKey = null;
+    _lastShownMessageKey = null;
+    _messageSubscription = _chatService
+        .watchLatestUnreadIncomingMessage()
+        .listen(
+          _handleMessageSnapshot,
+          onError: (Object error, StackTrace stackTrace) {
+            debugPrint(
+              'EmployeeMainNavigationPage: message stream error: $error',
+            );
+            debugPrintStack(stackTrace: stackTrace);
+          },
+        );
+  }
+
+  void _handleMessageSnapshot(MessageBannerNotification? notification) {
+    debugPrint(
+      'EmployeeMainNavigationPage: message snapshot received '
+      'hasMessage=${notification != null}',
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (notification == null) {
+      _messageListenerInitialized = true;
+      return;
+    }
+
+    final eventKey = notification.eventKey;
+    debugPrint(
+      'EmployeeMainNavigationPage: message received chatId=${notification.chatId} '
+      'senderId=${notification.senderId} senderName="${notification.senderName}" '
+      'eventKey=$eventKey lastMessageAt=${notification.lastMessageAt?.toDate()}',
+    );
+
+    if (!_messageListenerInitialized) {
+      _lastSeenMessageKey = eventKey;
+      _messageListenerInitialized = true;
+      debugPrint(
+        'EmployeeMainNavigationPage: first message snapshot skipped '
+        'eventKey=$eventKey',
+      );
+      return;
+    }
+
+    if (eventKey == _lastSeenMessageKey || eventKey == _lastShownMessageKey) {
+      debugPrint(
+        'EmployeeMainNavigationPage: duplicate message skipped '
+        'eventKey=$eventKey',
+      );
+      return;
+    }
+
+    debugPrint(
+      'EmployeeMainNavigationPage: new message detected eventKey=$eventKey',
+    );
+    _lastSeenMessageKey = eventKey;
+    _lastShownMessageKey = eventKey;
+    _messageBannerTimer?.cancel();
+    setState(() => _activeMessageNotification = notification);
+    debugPrint(
+      'EmployeeMainNavigationPage: message banner state set eventKey=$eventKey',
+    );
+    _messageBannerTimer = Timer(
+      const Duration(seconds: 4),
+      _dismissMessageBanner,
+    );
+  }
+
+  void _dismissMessageBanner() {
+    _messageBannerTimer?.cancel();
+    _messageBannerTimer = null;
+    if (_activeMessageNotification != null) {
+      debugPrint(
+        'EmployeeMainNavigationPage: message banner dismissed '
+        'eventKey=${_activeMessageNotification!.eventKey}',
+      );
+    }
+    if (mounted) {
+      setState(() => _activeMessageNotification = null);
+    } else {
+      _activeMessageNotification = null;
+    }
+  }
+
+  void _openMessageNotification(MessageBannerNotification notification) {
+    _dismissMessageBanner();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatDetailPage(chatId: notification.chatId),
+      ),
+    );
   }
 
   Future<void> _handleUnseenMatches(
@@ -208,7 +322,7 @@ class _EmployeeMainNavigationPageState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final scaffold = Scaffold(
       backgroundColor: AppColors.navyBg,
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: BottomNavigationBar(
@@ -229,8 +343,16 @@ class _EmployeeMainNavigationPageState
             icon: Icon(Icons.work_outline_rounded),
             label: 'Jobs',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.assignment_outlined),
+          BottomNavigationBarItem(
+            icon: StreamBuilder<int>(
+              stream: _applicationService.watchApprovedApplicationsCount(),
+              builder: (context, snapshot) {
+                return _ApplicationsNavIcon(
+                  matchCount: snapshot.data ?? 0,
+                  isSelected: _selectedIndex == 2,
+                );
+              },
+            ),
             label: 'Applications',
           ),
           BottomNavigationBarItem(
@@ -249,6 +371,86 @@ class _EmployeeMainNavigationPageState
             icon: Icon(Icons.person_outline_rounded),
             label: 'Profile',
           ),
+        ],
+      ),
+    );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (_activeMessageNotification != null)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: InAppNotificationBanner(
+              title: 'New message in your inbox',
+              body:
+                  '${_activeMessageNotification!.senderName} sent you a message',
+              avatarImageUrl: _activeMessageNotification!.senderImageUrl,
+              fallbackInitial: _activeMessageNotification!.senderName,
+              fallbackIcon: Icons.storefront_rounded,
+              onTap: () =>
+                  _openMessageNotification(_activeMessageNotification!),
+              onDismiss: _dismissMessageBanner,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ApplicationsNavIcon extends StatelessWidget {
+  const _ApplicationsNavIcon({
+    required this.matchCount,
+    required this.isSelected,
+  });
+
+  final int matchCount;
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasMatches = matchCount > 0;
+
+    return SizedBox(
+      height: 30,
+      width: 36,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Icon(
+            hasMatches
+                ? Icons.assignment_turned_in_rounded
+                : Icons.assignment_outlined,
+            color: isSelected ? AppColors.coralAccent : Colors.white54,
+          ),
+          if (hasMatches)
+            Positioned(
+              top: -3,
+              right: -2,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 17),
+                height: 17,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF6FD37A),
+                  shape: BoxShape.rectangle,
+                  borderRadius: BorderRadius.all(Radius.circular(999)),
+                ),
+                child: Text(
+                  matchCount > 9 ? '9+' : matchCount.toString(),
+                  style: const TextStyle(
+                    color: AppColors.navyBg,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
