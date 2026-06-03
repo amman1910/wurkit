@@ -12,6 +12,7 @@ import '../../messages/screens/messages_page.dart';
 import '../../messages/services/chat_service.dart';
 import '../../notifications/models/app_notification.dart';
 import '../../notifications/services/notification_service.dart';
+import '../../notifications/services/push_notification_service.dart';
 import '../../notifications/widgets/in_app_notification_banner.dart';
 import 'employer_dashboard_page.dart';
 
@@ -51,6 +52,7 @@ class _EmployerMainNavigationPageState
   @override
   void initState() {
     super.initState();
+    PushNotificationService.instance.initialize();
     _startNotificationListener();
     _startMessageListener();
   }

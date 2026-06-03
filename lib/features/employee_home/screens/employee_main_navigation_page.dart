@@ -13,6 +13,7 @@ import '../../matches/widgets/match_celebration_dialog.dart';
 import '../../messages/screens/chat_detail_page.dart';
 import '../../messages/screens/messages_page.dart';
 import '../../messages/services/chat_service.dart';
+import '../../notifications/services/push_notification_service.dart';
 import '../../notifications/widgets/in_app_notification_banner.dart';
 import 'employee_home_page.dart';
 
@@ -52,6 +53,7 @@ class _EmployeeMainNavigationPageState
   @override
   void initState() {
     super.initState();
+    PushNotificationService.instance.initialize();
     _matchSubscription = _matchService.watchUnseenEmployeeMatches().listen(
       _handleUnseenMatches,
       onError: (_) {},
