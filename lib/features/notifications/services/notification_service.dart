@@ -73,6 +73,7 @@ class NotificationService {
       'senderImageUrl': _trimOrNull(senderImageUrl),
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
+      'readAt': null,
     });
     debugPrint(
       'NotificationService.createNotification created '
