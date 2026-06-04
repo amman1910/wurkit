@@ -9,9 +9,66 @@ import '../models/employee_job_discovery_item.dart';
 import '../services/employee_job_discovery_service.dart';
 import '../widgets/employee_job_card.dart';
 import '../widgets/employee_job_result_card.dart';
+import '../widgets/job_discovery_action_buttons.dart';
 import 'job_details_page.dart';
 
-enum _SearchFilter { all, today, asap, evening }
+enum _DateFilter { any, today, tomorrow, thisWeek, custom }
+
+enum _ShiftFilter { any, morning, afternoon, evening, custom }
+
+enum _SwipeDecision { apply, notInterested }
+
+class _JobFilters {
+  const _JobFilters({
+    this.salaryRange = const RangeValues(20, 100),
+    this.dateFilter = _DateFilter.any,
+    this.customFrom,
+    this.customTo,
+    this.shiftFilter = _ShiftFilter.any,
+    this.customShiftStart,
+    this.customShiftEnd,
+  });
+
+  final RangeValues salaryRange;
+  final _DateFilter dateFilter;
+  final DateTime? customFrom;
+  final DateTime? customTo;
+  final _ShiftFilter shiftFilter;
+  final TimeOfDay? customShiftStart;
+  final TimeOfDay? customShiftEnd;
+
+  bool get hasSalaryFilter => salaryRange.start > 20 || salaryRange.end < 100;
+  bool get hasDateFilter => dateFilter != _DateFilter.any;
+  bool get hasShiftFilter => shiftFilter != _ShiftFilter.any;
+  bool get hasActiveFilters =>
+      hasSalaryFilter || hasDateFilter || hasShiftFilter;
+
+  _JobFilters copyWith({
+    RangeValues? salaryRange,
+    _DateFilter? dateFilter,
+    DateTime? customFrom,
+    DateTime? customTo,
+    bool clearCustomDates = false,
+    _ShiftFilter? shiftFilter,
+    TimeOfDay? customShiftStart,
+    TimeOfDay? customShiftEnd,
+    bool clearCustomShift = false,
+  }) {
+    return _JobFilters(
+      salaryRange: salaryRange ?? this.salaryRange,
+      dateFilter: dateFilter ?? this.dateFilter,
+      customFrom: clearCustomDates ? null : customFrom ?? this.customFrom,
+      customTo: clearCustomDates ? null : customTo ?? this.customTo,
+      shiftFilter: shiftFilter ?? this.shiftFilter,
+      customShiftStart: clearCustomShift
+          ? null
+          : customShiftStart ?? this.customShiftStart,
+      customShiftEnd: clearCustomShift
+          ? null
+          : customShiftEnd ?? this.customShiftEnd,
+    );
+  }
+}
 
 class EmployeeJobsPage extends StatefulWidget {
   const EmployeeJobsPage({super.key});
@@ -20,13 +77,16 @@ class EmployeeJobsPage extends StatefulWidget {
   State<EmployeeJobsPage> createState() => _EmployeeJobsPageState();
 }
 
-class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
+class _EmployeeJobsPageState extends State<EmployeeJobsPage>
+    with SingleTickerProviderStateMixin {
   final EmployeeJobDiscoveryService _service = EmployeeJobDiscoveryService();
   final TextEditingController _searchController = TextEditingController();
   final Set<String> _busyJobIds = {};
+  late final AnimationController _swipeAnimationController;
 
   List<EmployeeJobDiscoveryItem> _jobs = [];
-  _SearchFilter _filter = _SearchFilter.all;
+  Set<String> _savedJobIds = {};
+  _JobFilters _filters = const _JobFilters();
   bool _isLoading = true;
   String? _error;
   String _searchText = '';
@@ -34,15 +94,24 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
   int _feedbackVersion = 0;
   _ActionFeedback? _actionFeedback;
   Timer? _feedbackTimer;
+  Offset _dragOffset = Offset.zero;
+  double _dragRotation = 0;
+  bool _isAnimatingSwipe = false;
 
   bool get _isSearching => _searchText.isNotEmpty;
 
   EmployeeJobDiscoveryItem? get _currentJob =>
-      _jobs.isEmpty ? null : _jobs.first;
+      _visibleJobs.isEmpty ? null : _visibleJobs.first;
+
+  List<EmployeeJobDiscoveryItem> get _visibleJobs => _filteredJobs(_jobs);
 
   @override
   void initState() {
     super.initState();
+    _swipeAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
     _searchController.addListener(() {
       setState(() => _searchText = _searchController.text.trim().toLowerCase());
     });
@@ -52,6 +121,7 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
   @override
   void dispose() {
     _feedbackTimer?.cancel();
+    _swipeAnimationController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -63,12 +133,16 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
     });
 
     try {
-      final jobs = await _service.loadJobs();
+      final results = await Future.wait([
+        _service.loadJobs(),
+        _service.loadSavedJobIds(),
+      ]);
       if (!mounted) {
         return;
       }
       setState(() {
-        _jobs = jobs;
+        _jobs = results[0] as List<EmployeeJobDiscoveryItem>;
+        _savedJobIds = results[1] as Set<String>;
         _cardVersion++;
       });
     } catch (error) {
@@ -83,9 +157,12 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
     }
   }
 
-  Future<void> _apply(EmployeeJobDiscoveryItem job) async {
+  Future<bool> _apply(
+    EmployeeJobDiscoveryItem job, {
+    bool fromDetails = false,
+  }) async {
     if (_busyJobIds.contains(job.id)) {
-      return;
+      return false;
     }
 
     HapticFeedback.lightImpact();
@@ -94,18 +171,30 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
     try {
       await _service.applyToJob(job);
       if (!mounted) {
-        return;
+        return false;
       }
+      await _removeSavedIfNeeded(job.id, reason: 'applied');
+      _resetSwipeState();
       _removeJob(job.id);
       _showActionFeedback(
         icon: Icons.check_circle_rounded,
         text: 'Application sent',
         color: const Color(0xFF6FD37A),
       );
+      if (fromDetails) {
+        debugPrint('EmployeeJobsPage: Apply from details succeeded ${job.id}');
+      }
+      return true;
     } catch (error) {
       if (mounted) {
         _showSnackBar(_friendlyError(error));
       }
+      if (fromDetails) {
+        debugPrint(
+          'EmployeeJobsPage: Apply from details failed ${job.id}: $error',
+        );
+      }
+      return false;
     } finally {
       if (mounted) {
         setState(() => _busyJobIds.remove(job.id));
@@ -113,29 +202,37 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
     }
   }
 
-  Future<void> _markNotInterested(EmployeeJobDiscoveryItem job) async {
+  Future<bool> _markNotInterested(
+    EmployeeJobDiscoveryItem job, {
+    bool fromDetails = false,
+  }) async {
     if (_busyJobIds.contains(job.id)) {
-      return;
+      return false;
     }
 
+    debugPrint('EmployeeJobsPage: Not Interested pressed ${job.id}');
     HapticFeedback.mediumImpact();
     setState(() => _busyJobIds.add(job.id));
 
     try {
       await _service.markNotInterested(job);
       if (!mounted) {
-        return;
+        return false;
       }
+      await _removeSavedIfNeeded(job.id, reason: 'not_interested');
+      _resetSwipeState();
       _removeJob(job.id);
       _showActionFeedback(
         icon: Icons.block_rounded,
         text: 'Removed from your feed',
         color: const Color(0xFFFF7A68),
       );
+      return true;
     } catch (error) {
       if (mounted) {
         _showSnackBar(_friendlyError(error));
       }
+      return false;
     } finally {
       if (mounted) {
         setState(() => _busyJobIds.remove(job.id));
@@ -144,7 +241,26 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
   }
 
   void _skipCurrentJob() {
-    if (_jobs.length <= 1) {
+    final currentJob = _currentJob;
+    if (currentJob == null) {
+      return;
+    }
+
+    _skipJob(currentJob);
+  }
+
+  bool _skipJob(EmployeeJobDiscoveryItem job, {bool fromDetails = false}) {
+    debugPrint('EmployeeJobsPage: Skip pressed ${job.id}');
+    final skippedIndex = _jobs.indexWhere((item) => item.id == job.id);
+    if (skippedIndex < 0) {
+      debugPrint(
+        'EmployeeJobsPage: Skip ignored because job is not in queue ${job.id}',
+      );
+      return false;
+    }
+
+    final visibleJobs = _visibleJobs;
+    if (visibleJobs.length <= 1) {
       HapticFeedback.selectionClick();
       setState(() => _cardVersion++);
       _showActionFeedback(
@@ -152,12 +268,15 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
         text: 'Skipped for now',
         color: AppColors.coralAccent,
       );
-      return;
+      debugPrint(
+        'EmployeeJobsPage: Skip kept ${job.id} in place because queue has ${visibleJobs.length} visible job(s)',
+      );
+      return true;
     }
 
     HapticFeedback.selectionClick();
     setState(() {
-      final skipped = _jobs.removeAt(0);
+      final skipped = _jobs.removeAt(skippedIndex);
       _jobs.add(skipped);
       _cardVersion++;
     });
@@ -166,6 +285,8 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
       text: 'Skipped for now',
       color: AppColors.coralAccent,
     );
+    debugPrint('EmployeeJobsPage: Job moved to end of queue ${job.id}');
+    return true;
   }
 
   void _removeJob(String jobId) {
@@ -175,35 +296,291 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
     });
   }
 
+  Future<void> _toggleSaved(EmployeeJobDiscoveryItem job) async {
+    final wasSaved = _savedJobIds.contains(job.id);
+    setState(() {
+      if (wasSaved) {
+        _savedJobIds.remove(job.id);
+      } else {
+        _savedJobIds.add(job.id);
+      }
+    });
+
+    try {
+      if (wasSaved) {
+        await _service.unsaveJob(job.id);
+      } else {
+        await _service.saveJob(job);
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        if (wasSaved) {
+          _savedJobIds.add(job.id);
+        } else {
+          _savedJobIds.remove(job.id);
+        }
+      });
+      _showSnackBar(_friendlyError(error));
+    }
+  }
+
+  Future<void> _removeSavedIfNeeded(
+    String jobId, {
+    required String reason,
+  }) async {
+    if (!_savedJobIds.contains(jobId)) {
+      return;
+    }
+
+    setState(() => _savedJobIds.remove(jobId));
+    try {
+      await _service.unsaveJob(jobId);
+      if (reason == 'not_interested') {
+        debugPrint(
+          'EmployeeJobsPage: Saved job removed because not interested $jobId',
+        );
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      debugPrint(
+        'EmployeeJobsPage: Saved job cleanup failed for $jobId: $error',
+      );
+      _showSnackBar(_friendlyError(error));
+    }
+  }
+
+  Future<void> _openFilters() async {
+    final nextFilters = await showModalBottomSheet<_JobFilters>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _JobFilterSheet(filters: _filters),
+    );
+    if (nextFilters == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _filters = nextFilters;
+      _cardVersion++;
+    });
+  }
+
+  Future<void> _openSavedJobs() async {
+    final jobs = await _service.loadSavedJobs();
+    if (!mounted) {
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SavedJobsSheet(
+        jobs: jobs,
+        savedJobIds: _savedJobIds,
+        onToggleSaved: (job) => _toggleSaved(job),
+        onViewJob: (job) {
+          Navigator.of(context).pop();
+          _openDetails(job);
+        },
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _completeSwipe(
+    EmployeeJobDiscoveryItem job,
+    _SwipeDecision decision,
+  ) async {
+    if (_isAnimatingSwipe || _busyJobIds.contains(job.id)) {
+      return;
+    }
+
+    final direction = decision == _SwipeDecision.apply ? 1.0 : -1.0;
+    setState(() => _isAnimatingSwipe = true);
+    await _animateSwipeTo(Offset(direction * 520, _dragOffset.dy));
+
+    if (decision == _SwipeDecision.apply) {
+      await _apply(job);
+    } else {
+      await _markNotInterested(job);
+    }
+
+    if (mounted) {
+      if (_jobs.any((item) => item.id == job.id)) {
+        await _animateSwipeHome();
+      }
+      setState(() => _isAnimatingSwipe = false);
+    }
+  }
+
+  Future<void> _animateSwipeTo(Offset target) async {
+    final start = _dragOffset;
+    final animation = CurvedAnimation(
+      parent: _swipeAnimationController,
+      curve: Curves.easeOutCubic,
+    );
+    _swipeAnimationController
+      ..stop()
+      ..reset();
+
+    final progress = Tween<double>(begin: 0, end: 1).animate(animation);
+    void updateSwipePosition() {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dragOffset = Offset.lerp(start, target, progress.value)!;
+        _dragRotation = (_dragOffset.dx / 330).clamp(-0.18, 0.18);
+      });
+    }
+
+    progress.addListener(updateSwipePosition);
+
+    await _swipeAnimationController.forward();
+    progress.removeListener(updateSwipePosition);
+  }
+
+  Future<void> _animateSwipeHome() async {
+    await _animateSwipeTo(Offset.zero);
+    _resetSwipeState();
+  }
+
+  void _resetSwipeState() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _dragOffset = Offset.zero;
+      _dragRotation = 0;
+    });
+  }
+
   void _openDetails(EmployeeJobDiscoveryItem job) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => JobDetailsPage(jobId: job.id)));
+    debugPrint(
+      'EmployeeJobsPage: JobDetailsPage opened in discovery mode ${job.id}',
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => JobDetailsPage(
+          jobId: job.id,
+          showDiscoveryActions: true,
+          onDiscoveryNotInterested: () =>
+              _markNotInterested(job, fromDetails: true),
+          onDiscoverySkip: () async => _skipJob(job, fromDetails: true),
+          onDiscoveryApply: () => _apply(job, fromDetails: true),
+        ),
+      ),
+    );
   }
 
   List<EmployeeJobDiscoveryItem> get _searchResults {
+    return _visibleJobs;
+  }
+
+  List<EmployeeJobDiscoveryItem> _filteredJobs(
+    List<EmployeeJobDiscoveryItem> source,
+  ) {
     final text = _searchText;
-    final results = _jobs.where((job) {
+    return source.where((job) {
       final matchesText = job.searchText.contains(text);
       if (!matchesText) {
         return false;
       }
-      return switch (_filter) {
-        _SearchFilter.all => true,
-        _SearchFilter.today => job.isToday,
-        _SearchFilter.asap => job.isAsap,
-        _SearchFilter.evening => job.isEvening,
-      };
+      return _matchesSalary(job) && _matchesDate(job) && _matchesShift(job);
     }).toList();
+  }
 
-    results.sort((a, b) {
-      final aTime = a.publishedAt ?? a.createdAt ?? a.updatedAt;
-      final bTime = b.publishedAt ?? b.createdAt ?? b.updatedAt;
-      return (bTime?.millisecondsSinceEpoch ?? 0).compareTo(
-        aTime?.millisecondsSinceEpoch ?? 0,
-      );
-    });
-    return results;
+  bool _matchesSalary(EmployeeJobDiscoveryItem job) {
+    if (!_filters.hasSalaryFilter) {
+      return true;
+    }
+    final amount = job.salaryAmount;
+    if (amount == null) {
+      return false;
+    }
+    return amount >= _filters.salaryRange.start &&
+        (_filters.salaryRange.end >= 100 || amount <= _filters.salaryRange.end);
+  }
+
+  bool _matchesDate(EmployeeJobDiscoveryItem job) {
+    final date = job.startDate;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    return switch (_filters.dateFilter) {
+      _DateFilter.any => true,
+      _DateFilter.today =>
+        job.startAsSoonAsPossible || (date != null && _sameDay(date, today)),
+      _DateFilter.tomorrow => date != null && _sameDay(date, tomorrow),
+      _DateFilter.thisWeek =>
+        date != null &&
+            !date.isBefore(today) &&
+            date.isBefore(today.add(const Duration(days: 7))),
+      _DateFilter.custom => _matchesCustomDate(date),
+    };
+  }
+
+  bool _matchesCustomDate(DateTime? date) {
+    if (date == null) {
+      return false;
+    }
+    final from = _filters.customFrom;
+    final to = _filters.customTo;
+    if (from != null && date.isBefore(_dateOnly(from))) {
+      return false;
+    }
+    if (to != null &&
+        date.isAfter(_dateOnly(to).add(const Duration(days: 1)))) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _matchesShift(EmployeeJobDiscoveryItem job) {
+    final start = job.shiftStartMinutes;
+    final end = job.shiftEndMinutes ?? start;
+    return switch (_filters.shiftFilter) {
+      _ShiftFilter.any => true,
+      _ShiftFilter.morning => start != null && start < 12 * 60,
+      _ShiftFilter.afternoon =>
+        start != null && start >= 12 * 60 && start < 17 * 60,
+      _ShiftFilter.evening => start != null && start >= 17 * 60,
+      _ShiftFilter.custom => _matchesCustomShift(start, end),
+    };
+  }
+
+  bool _matchesCustomShift(int? start, int? end) {
+    if (start == null) {
+      return false;
+    }
+    final filterStart = _minutesFromTime(_filters.customShiftStart);
+    final filterEnd = _minutesFromTime(_filters.customShiftEnd);
+    if (filterStart != null && start < filterStart) {
+      return false;
+    }
+    if (filterEnd != null && (end ?? start) > filterEnd) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _sameDay(DateTime left, DateTime right) {
+    return left.year == right.year &&
+        left.month == right.month &&
+        left.day == right.day;
+  }
+
+  DateTime _dateOnly(DateTime value) {
+    return DateTime(value.year, value.month, value.day);
   }
 
   void _showSnackBar(String message) {
@@ -289,19 +666,47 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
     final currentJob = _currentJob;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _DiscoveryHeader(),
-          const SizedBox(height: 14),
+          _DiscoveryHeader(
+            hasActiveFilters: _filters.hasActiveFilters,
+            savedCount: _savedJobIds.length,
+            onOpenSaved: _openSavedJobs,
+            onOpenFilters: _openFilters,
+          ),
+          const SizedBox(height: 12),
           _SearchField(
             controller: _searchController,
             hint: 'Search by job title, business or location',
           ),
-          const SizedBox(height: 14),
+          if (_filters.hasActiveFilters) ...[
+            const SizedBox(height: 10),
+            _ActiveFilterSummary(
+              onClear: () {
+                setState(() {
+                  _filters = const _JobFilters();
+                  _cardVersion++;
+                });
+              },
+            ),
+          ],
+          const SizedBox(height: 10),
           if (currentJob == null)
-            Expanded(child: _NoJobsView(onRefresh: _loadJobs))
+            Expanded(
+              child: _jobs.isEmpty
+                  ? _NoJobsView(onRefresh: _loadJobs)
+                  : _NoFilterMatchesView(
+                      onClear: () {
+                        setState(() {
+                          _filters = const _JobFilters();
+                          _searchController.clear();
+                          _cardVersion++;
+                        });
+                      },
+                    ),
+            )
           else ...[
             Expanded(
               child: AnimatedSwitcher(
@@ -325,18 +730,61 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
                 child: EmployeeJobCard(
                   key: ValueKey('${currentJob.id}-$_cardVersion'),
                   job: currentJob,
-                  position: 1,
-                  total: _jobs.length,
+                  isSaved: _savedJobIds.contains(currentJob.id),
                   onViewDetails: () => _openDetails(currentJob),
+                  onToggleSaved: () => _toggleSaved(currentJob),
+                  actionButtons: JobDiscoveryActionButtons(
+                    isBusy: _busyJobIds.contains(currentJob.id),
+                    onNotInterested: () => _completeSwipe(
+                      currentJob,
+                      _SwipeDecision.notInterested,
+                    ),
+                    onSkip: _skipCurrentJob,
+                    onApply: () =>
+                        _completeSwipe(currentJob, _SwipeDecision.apply),
+                  ),
                 ),
+                layoutBuilder: (currentChild, previousChildren) {
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      ...previousChildren,
+                      if (currentChild != null)
+                        _SwipeableJobCard(
+                          dragOffset: _dragOffset,
+                          rotation: _dragRotation,
+                          isBusy:
+                              _isAnimatingSwipe ||
+                              _busyJobIds.contains(currentJob.id),
+                          onDragUpdate: (details) {
+                            setState(() {
+                              _dragOffset += details.delta;
+                              _dragRotation = (_dragOffset.dx / 330).clamp(
+                                -0.18,
+                                0.18,
+                              );
+                            });
+                          },
+                          onDragEnd: () {
+                            final threshold =
+                                MediaQuery.sizeOf(context).width * 0.28;
+                            if (_dragOffset.dx > threshold) {
+                              _completeSwipe(currentJob, _SwipeDecision.apply);
+                            } else if (_dragOffset.dx < -threshold) {
+                              _completeSwipe(
+                                currentJob,
+                                _SwipeDecision.notInterested,
+                              );
+                            } else {
+                              _animateSwipeHome();
+                            }
+                          },
+                          child: currentChild,
+                        ),
+                    ],
+                  );
+                },
               ),
-            ),
-            const SizedBox(height: 8),
-            _DecisionButtons(
-              isBusy: _busyJobIds.contains(currentJob.id),
-              onNotInterested: () => _markNotInterested(currentJob),
-              onSkip: _skipCurrentJob,
-              onApply: () => _apply(currentJob),
             ),
           ],
         ],
@@ -379,9 +827,28 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _FilterRow(
-            value: _filter,
-            onChanged: (value) => setState(() => _filter = value),
+          child: Row(
+            children: [
+              Expanded(
+                child: _ActiveFilterSummary(
+                  onClear: _filters.hasActiveFilters
+                      ? () {
+                          setState(() {
+                            _filters = const _JobFilters();
+                            _cardVersion++;
+                          });
+                        }
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 10),
+              _CircleIconButton(
+                icon: Icons.tune_rounded,
+                onTap: _openFilters,
+                isActive: _filters.hasActiveFilters,
+                size: 42,
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
@@ -433,8 +900,10 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage> {
                     return EmployeeJobResultCard(
                       job: job,
                       isApplying: _busyJobIds.contains(job.id),
+                      isSaved: _savedJobIds.contains(job.id),
                       onTap: () => _openDetails(job),
                       onApply: () => _apply(job),
+                      onToggleSaved: () => _toggleSaved(job),
                     );
                   },
                 ),
@@ -541,7 +1010,17 @@ class _ActionFeedbackOverlay extends StatelessWidget {
 }
 
 class _DiscoveryHeader extends StatelessWidget {
-  const _DiscoveryHeader();
+  const _DiscoveryHeader({
+    required this.hasActiveFilters,
+    required this.savedCount,
+    required this.onOpenSaved,
+    required this.onOpenFilters,
+  });
+
+  final bool hasActiveFilters;
+  final int savedCount;
+  final VoidCallback onOpenSaved;
+  final VoidCallback onOpenFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -570,8 +1049,195 @@ class _DiscoveryHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        _CircleIconButton(icon: Icons.tune_rounded, onTap: () {}),
+        _CircleIconButton(
+          icon: savedCount > 0 ? Icons.favorite_rounded : Icons.favorite_border,
+          onTap: onOpenSaved,
+          isActive: savedCount > 0,
+        ),
+        const SizedBox(width: 8),
+        _CircleIconButton(
+          icon: Icons.tune_rounded,
+          onTap: onOpenFilters,
+          isActive: hasActiveFilters,
+        ),
       ],
+    );
+  }
+}
+
+class _ActiveFilterSummary extends StatelessWidget {
+  const _ActiveFilterSummary({required this.onClear});
+
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = onClear != null;
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: active
+            ? AppColors.coralAccent.withValues(alpha: 0.14)
+            : AppColors.surface.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: active
+              ? AppColors.coralAccent.withValues(alpha: 0.55)
+              : AppColors.border,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            active ? Icons.filter_alt_rounded : Icons.filter_alt_off_outlined,
+            color: active ? AppColors.coralAccent : AppColors.lightText,
+            size: 17,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              active ? 'Filters active' : 'Any salary, date and time',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: active ? AppColors.white : AppColors.lightText,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          if (active) ...[
+            const SizedBox(width: 5),
+            GestureDetector(
+              onTap: onClear,
+              child: const Icon(
+                Icons.close_rounded,
+                color: AppColors.coralAccent,
+                size: 17,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SwipeableJobCard extends StatelessWidget {
+  const _SwipeableJobCard({
+    required this.dragOffset,
+    required this.rotation,
+    required this.isBusy,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+    required this.child,
+  });
+
+  final Offset dragOffset;
+  final double rotation;
+  final bool isBusy;
+  final ValueChanged<DragUpdateDetails> onDragUpdate;
+  final VoidCallback onDragEnd;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final progress = (dragOffset.dx.abs() / (width * 0.34)).clamp(0.0, 1.0);
+    final isApply = dragOffset.dx >= 0;
+    final color = isApply ? const Color(0xFF6FD37A) : const Color(0xFFFF7A68);
+
+    return GestureDetector(
+      onPanUpdate: isBusy ? null : onDragUpdate,
+      onPanEnd: isBusy ? null : (_) => onDragEnd(),
+      onPanCancel: isBusy ? null : onDragEnd,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 80),
+                opacity: progress,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: color.withValues(alpha: 0.45)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.26),
+                        blurRadius: 34,
+                        offset: const Offset(0, 18),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Transform.rotate(
+                      angle: isApply ? -0.08 : 0.08,
+                      child: _SwipeLabel(
+                        icon: isApply
+                            ? Icons.check_rounded
+                            : Icons.close_rounded,
+                        label: isApply
+                            ? (progress > 0.82 ? 'APPLIED!' : 'APPLY')
+                            : 'NOT INTERESTED',
+                        color: color,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Transform.translate(
+            offset: dragOffset,
+            child: Transform.rotate(angle: rotation, child: child),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SwipeLabel extends StatelessWidget {
+  const _SwipeLabel({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: color.withValues(alpha: 0.8), width: 2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 34),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -631,110 +1297,227 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-class _DecisionButtons extends StatelessWidget {
-  const _DecisionButtons({
-    required this.isBusy,
-    required this.onNotInterested,
-    required this.onSkip,
-    required this.onApply,
-  });
+class _JobFilterSheet extends StatefulWidget {
+  const _JobFilterSheet({required this.filters});
 
-  final bool isBusy;
-  final VoidCallback onNotInterested;
-  final VoidCallback onSkip;
-  final VoidCallback onApply;
+  final _JobFilters filters;
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _DecisionButton(
-          icon: Icons.close_rounded,
-          label: 'Not interested',
-          color: const Color(0xFFFF7A68),
-          onTap: isBusy ? null : onNotInterested,
-        ),
-        _DecisionButton(
-          icon: Icons.keyboard_double_arrow_right_rounded,
-          label: 'Skip',
-          color: Colors.white70,
-          onTap: isBusy ? null : onSkip,
-        ),
-        _DecisionButton(
-          icon: Icons.check_rounded,
-          label: 'Apply',
-          color: const Color(0xFF6FD37A),
-          filled: true,
-          onTap: isBusy ? null : onApply,
-        ),
-      ],
-    );
-  }
+  State<_JobFilterSheet> createState() => _JobFilterSheetState();
 }
 
-class _DecisionButton extends StatelessWidget {
-  const _DecisionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-    this.filled = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback? onTap;
-  final bool filled;
+class _JobFilterSheetState extends State<_JobFilterSheet> {
+  late _JobFilters _draft = widget.filters;
 
   @override
   Widget build(BuildContext context) {
-    return Flexible(
-      child: Opacity(
-        opacity: onTap == null ? 0.55 : 1,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: EdgeInsets.fromLTRB(
+          18,
+          14,
+          18,
+          18 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111B30),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.42),
+              blurRadius: 32,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 66,
-                height: 66,
-                decoration: BoxDecoration(
-                  color: filled ? color : AppColors.surface,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: filled ? color : AppColors.border,
-                    width: 1.3,
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Filters',
+                      style: TextStyle(
+                        color: AppColors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
-                  boxShadow: filled
-                      ? [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.32),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12),
-                          ),
-                        ]
-                      : null,
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                    color: AppColors.lightText,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _SheetLabel(
+                title: 'Salary range',
+                value: _draft.hasSalaryFilter
+                    ? '${_money(_draft.salaryRange.start)} - ${_draft.salaryRange.end >= 100 ? '₪100+' : _money(_draft.salaryRange.end)}'
+                    : 'Any salary',
+              ),
+              RangeSlider(
+                min: 20,
+                max: 100,
+                divisions: 16,
+                values: _draft.salaryRange,
+                activeColor: const Color(0xFF6FD37A),
+                inactiveColor: AppColors.border,
+                labels: RangeLabels(
+                  _money(_draft.salaryRange.start),
+                  _draft.salaryRange.end >= 100
+                      ? '₪100+'
+                      : _money(_draft.salaryRange.end),
                 ),
-                child: Icon(
-                  icon,
-                  color: filled ? AppColors.navyBg : color,
-                  size: 34,
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(salaryRange: value),
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
+              const SizedBox(height: 10),
+              const _SheetSectionTitle('Date'),
+              _ChipWrap(
+                items: const [
+                  (_DateFilter.any, 'Any date'),
+                  (_DateFilter.today, 'Today'),
+                  (_DateFilter.tomorrow, 'Tomorrow'),
+                  (_DateFilter.thisWeek, 'This week'),
+                  (_DateFilter.custom, 'Custom'),
+                ],
+                selected: _draft.dateFilter,
+                onSelected: (value) => setState(() {
+                  _draft = _draft.copyWith(
+                    dateFilter: value,
+                    clearCustomDates: value != _DateFilter.custom,
+                  );
+                }),
+              ),
+              if (_draft.dateFilter == _DateFilter.custom) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PickerField(
+                        label: 'From',
+                        value: _formatDate(_draft.customFrom) ?? 'Any',
+                        onTap: () async {
+                          final date = await _pickDate(_draft.customFrom);
+                          if (date != null) {
+                            setState(
+                              () => _draft = _draft.copyWith(customFrom: date),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _PickerField(
+                        label: 'To',
+                        value: _formatDate(_draft.customTo) ?? 'Any',
+                        onTap: () async {
+                          final date = await _pickDate(_draft.customTo);
+                          if (date != null) {
+                            setState(
+                              () => _draft = _draft.copyWith(customTo: date),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
+              ],
+              const SizedBox(height: 18),
+              const _SheetSectionTitle('Shift time'),
+              _ChipWrap(
+                items: const [
+                  (_ShiftFilter.any, 'Any time'),
+                  (_ShiftFilter.morning, 'Morning'),
+                  (_ShiftFilter.afternoon, 'Afternoon'),
+                  (_ShiftFilter.evening, 'Evening'),
+                  (_ShiftFilter.custom, 'Custom'),
+                ],
+                selected: _draft.shiftFilter,
+                onSelected: (value) => setState(() {
+                  _draft = _draft.copyWith(
+                    shiftFilter: value,
+                    clearCustomShift: value != _ShiftFilter.custom,
+                  );
+                }),
+              ),
+              if (_draft.shiftFilter == _ShiftFilter.custom) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PickerField(
+                        label: 'Start time',
+                        value: _formatTime(_draft.customShiftStart) ?? 'Any',
+                        onTap: () async {
+                          final time = await _pickTime(_draft.customShiftStart);
+                          if (time != null) {
+                            setState(
+                              () => _draft = _draft.copyWith(
+                                customShiftStart: time,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _PickerField(
+                        label: 'End time',
+                        value: _formatTime(_draft.customShiftEnd) ?? 'Any',
+                        onTap: () async {
+                          final time = await _pickTime(_draft.customShiftEnd);
+                          if (time != null) {
+                            setState(
+                              () => _draft = _draft.copyWith(
+                                customShiftEnd: time,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () =>
+                          setState(() => _draft = const _JobFilters()),
+                      style: AppButtonStyles.secondaryOutline(
+                        borderColor: AppColors.border,
+                      ),
+                      child: const Text('Clear all'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, _draft),
+                      style: AppButtonStyles.primary(
+                        backgroundColor: const Color(0xFF8D73D9),
+                        foregroundColor: AppColors.white,
+                      ),
+                      child: const Text('Show jobs'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -742,60 +1525,245 @@ class _DecisionButton extends StatelessWidget {
       ),
     );
   }
+
+  Future<DateTime?> _pickDate(DateTime? initialDate) {
+    final now = DateTime.now();
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate ?? now,
+      firstDate: now.subtract(const Duration(days: 1)),
+      lastDate: now.add(const Duration(days: 180)),
+    );
+  }
+
+  Future<TimeOfDay?> _pickTime(TimeOfDay? initialTime) {
+    return showTimePicker(
+      context: context,
+      initialTime: initialTime ?? TimeOfDay.now(),
+    );
+  }
 }
 
-class _FilterRow extends StatelessWidget {
-  const _FilterRow({required this.value, required this.onChanged});
+class _SavedJobsSheet extends StatefulWidget {
+  const _SavedJobsSheet({
+    required this.jobs,
+    required this.savedJobIds,
+    required this.onToggleSaved,
+    required this.onViewJob,
+  });
 
-  final _SearchFilter value;
-  final ValueChanged<_SearchFilter> onChanged;
+  final List<EmployeeJobDiscoveryItem> jobs;
+  final Set<String> savedJobIds;
+  final ValueChanged<EmployeeJobDiscoveryItem> onToggleSaved;
+  final ValueChanged<EmployeeJobDiscoveryItem> onViewJob;
+
+  @override
+  State<_SavedJobsSheet> createState() => _SavedJobsSheetState();
+}
+
+class _SavedJobsSheetState extends State<_SavedJobsSheet> {
+  late final List<EmployeeJobDiscoveryItem> _jobs = [...widget.jobs];
+  late final Set<String> _savedJobIds = {...widget.savedJobIds};
 
   @override
   Widget build(BuildContext context) {
-    final filters = [
-      (_SearchFilter.all, 'All', Icons.manage_search_rounded),
-      (_SearchFilter.today, 'Today', Icons.calendar_today_rounded),
-      (_SearchFilter.asap, 'ASAP', Icons.bolt_rounded),
-      (_SearchFilter.evening, 'Evening', Icons.nightlight_round),
-    ];
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+        ),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111B30),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Saved Jobs',
+                    style: TextStyle(
+                      color: AppColors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                  color: AppColors.lightText,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _jobs.isEmpty
+                  ? const _NoSavedJobsView()
+                  : ListView.separated(
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: _jobs.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final job = _jobs[index];
+                        return EmployeeJobResultCard(
+                          job: job,
+                          isApplying: false,
+                          isSaved: _savedJobIds.contains(job.id),
+                          onTap: () => widget.onViewJob(job),
+                          onApply: () => widget.onViewJob(job),
+                          onToggleSaved: () {
+                            setState(() {
+                              if (_savedJobIds.contains(job.id)) {
+                                _savedJobIds.remove(job.id);
+                                _jobs.removeWhere((item) => item.id == job.id);
+                              } else {
+                                _savedJobIds.add(job.id);
+                              }
+                            });
+                            widget.onToggleSaved(job);
+                          },
+                          actionLabel: 'View',
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: [
-          ...filters.map((filter) {
-            final selected = value == filter.$1;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                selected: selected,
-                showCheckmark: false,
-                avatar: filter.$1 == _SearchFilter.all
-                    ? Icon(
-                        filter.$3,
-                        size: 16,
-                        color: selected
-                            ? AppColors.navyBg
-                            : AppColors.lightText,
-                      )
-                    : null,
-                label: Text(filter.$2),
-                onSelected: (_) => onChanged(filter.$1),
-                selectedColor: AppColors.coralAccent,
-                backgroundColor: Colors.transparent,
-                side: BorderSide(
-                  color: selected ? AppColors.coralAccent : AppColors.border,
+class _ChipWrap<T> extends StatelessWidget {
+  const _ChipWrap({
+    required this.items,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<(T, String)> items;
+  final T selected;
+  final ValueChanged<T> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: items.map((item) {
+        final isSelected = item.$1 == selected;
+        return ChoiceChip(
+          selected: isSelected,
+          showCheckmark: false,
+          label: Text(item.$2),
+          onSelected: (_) => onSelected(item.$1),
+          selectedColor: const Color(0xFF8D73D9),
+          backgroundColor: AppColors.surface.withValues(alpha: 0.48),
+          side: BorderSide(
+            color: isSelected ? const Color(0xFF8D73D9) : AppColors.border,
+          ),
+          labelStyle: TextStyle(
+            color: isSelected ? AppColors.white : AppColors.lightText,
+            fontWeight: FontWeight.w800,
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _SheetLabel extends StatelessWidget {
+  const _SheetLabel({required this.title, required this.value});
+
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _SheetSectionTitle(title)),
+        Text(value, style: AppTextStyles.label),
+      ],
+    );
+  }
+}
+
+class _SheetSectionTitle extends StatelessWidget {
+  const _SheetSectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: AppColors.white,
+        fontSize: 14,
+        fontWeight: FontWeight.w900,
+      ),
+    );
+  }
+}
+
+class _PickerField extends StatelessWidget {
+  const _PickerField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface.withValues(alpha: 0.48),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: AppTextStyles.label.copyWith(fontSize: 12)),
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-                labelStyle: TextStyle(
-                  color: selected ? AppColors.navyBg : AppColors.lightText,
-                  fontWeight: FontWeight.w800,
+                const Icon(
+                  Icons.calendar_today_rounded,
+                  color: AppColors.lightText,
+                  size: 16,
                 ),
-              ),
-            );
-          }),
-          _CircleIconButton(icon: Icons.tune_rounded, onTap: () {}, size: 42),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -806,23 +1774,33 @@ class _CircleIconButton extends StatelessWidget {
     required this.icon,
     required this.onTap,
     this.size = 48,
+    this.isActive = false,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final double size;
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onTap,
       icon: Icon(icon),
-      color: AppColors.lightText,
+      color: isActive ? AppColors.coralAccent : AppColors.lightText,
       style: IconButton.styleFrom(
         fixedSize: Size(size, size),
-        side: const BorderSide(color: AppColors.border),
-        backgroundColor: AppColors.surface.withValues(alpha: 0.45),
+        side: BorderSide(
+          color: isActive
+              ? AppColors.coralAccent.withValues(alpha: 0.72)
+              : AppColors.border,
+        ),
+        backgroundColor: isActive
+            ? AppColors.coralAccent.withValues(alpha: 0.14)
+            : AppColors.surface.withValues(alpha: 0.45),
         shape: const CircleBorder(),
+        shadowColor: isActive ? AppColors.coralAccent : null,
+        elevation: isActive ? 6 : 0,
       ),
     );
   }
@@ -881,6 +1859,43 @@ class _NoSearchResultsView extends StatelessWidget {
           title: 'No jobs found',
           message: 'Try a different title, business or location.',
         ),
+      ),
+    );
+  }
+}
+
+class _NoFilterMatchesView extends StatelessWidget {
+  const _NoFilterMatchesView({required this.onClear});
+
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: _StateCard(
+        icon: Icons.filter_alt_off_rounded,
+        title: 'No jobs match your filters',
+        message: 'Try clearing filters or adjusting your search.',
+        action: OutlinedButton(
+          onPressed: onClear,
+          style: AppButtonStyles.secondaryOutline(),
+          child: const Text('Clear filters'),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoSavedJobsView extends StatelessWidget {
+  const _NoSavedJobsView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: _StateCard(
+        icon: Icons.bookmark_border_rounded,
+        title: 'No saved jobs yet',
+        message: 'Tap the bookmark icon on a job to save it for later.',
       ),
     );
   }
@@ -979,4 +1994,31 @@ class _StateCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _money(double value) {
+  return '₪${value.round()}';
+}
+
+String? _formatDate(DateTime? value) {
+  if (value == null) {
+    return null;
+  }
+  return '${value.month}/${value.day}/${value.year}';
+}
+
+String? _formatTime(TimeOfDay? value) {
+  if (value == null) {
+    return null;
+  }
+  final hour = value.hour.toString().padLeft(2, '0');
+  final minute = value.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+int? _minutesFromTime(TimeOfDay? value) {
+  if (value == null) {
+    return null;
+  }
+  return value.hour * 60 + value.minute;
 }
