@@ -7,16 +7,27 @@ import 'dart:ui';
 import '../../../core/theme/app_ui.dart';
 import '../../messages/screens/chat_detail_page.dart';
 import '../../messages/services/chat_service.dart';
+import '../widgets/job_discovery_action_buttons.dart';
+
+typedef DiscoveryJobAction = Future<bool> Function();
 
 class JobDetailsPage extends StatefulWidget {
   const JobDetailsPage({
     super.key,
     required this.jobId,
     this.openedFromChat = false,
+    this.showDiscoveryActions = false,
+    this.onDiscoveryNotInterested,
+    this.onDiscoverySkip,
+    this.onDiscoveryApply,
   });
 
   final String jobId;
   final bool openedFromChat;
+  final bool showDiscoveryActions;
+  final DiscoveryJobAction? onDiscoveryNotInterested;
+  final DiscoveryJobAction? onDiscoverySkip;
+  final DiscoveryJobAction? onDiscoveryApply;
 
   @override
   State<JobDetailsPage> createState() => _JobDetailsPageState();
@@ -30,6 +41,7 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
   late final Stream<DocumentSnapshot<Map<String, dynamic>>> _jobStream;
   bool _isApplying = false;
   bool _isOpeningChat = false;
+  bool _isRunningDiscoveryAction = false;
   int _supportDataVersion = 0;
 
   @override
@@ -162,6 +174,34 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
     } finally {
       if (mounted) {
         setState(() => _isOpeningChat = false);
+      }
+    }
+  }
+
+  Future<void> _runDiscoveryAction(
+    String action,
+    DiscoveryJobAction? callback,
+  ) async {
+    if (callback == null || _isRunningDiscoveryAction) {
+      return;
+    }
+
+    debugPrint(
+      'JobDetailsPage: discovery action selected $action ${widget.jobId}',
+    );
+    setState(() => _isRunningDiscoveryAction = true);
+
+    try {
+      final succeeded = await callback();
+      if (!mounted) {
+        return;
+      }
+      if (succeeded) {
+        Navigator.of(context).pop();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRunningDiscoveryAction = false);
       }
     }
   }
@@ -304,23 +344,37 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
                           ),
                           const SizedBox(height: AppSpacing.section),
                           _BusinessPreviewCard(employer: support.employer),
-                          const SizedBox(height: 88),
+                          SizedBox(
+                            height: widget.showDiscoveryActions ? 108 : 88,
+                          ),
                         ]),
                       ),
                     ),
                   ],
                 ),
               ),
-              bottomNavigationBar: _ApplyBottomBar(
-                job: job,
-                application: support.application,
-                isApplying: _isApplying,
-                isOpeningChat: _isOpeningChat,
-                isCheckingApplication: isCheckingApplication,
-                isAuthenticated: _auth.currentUser != null,
-                onApply: () => _applyToJob(job),
-                onOpenChat: () => _openChat(job),
-              ),
+              bottomNavigationBar: widget.showDiscoveryActions
+                  ? _DiscoveryBottomBar(
+                      isBusy: _isRunningDiscoveryAction,
+                      onNotInterested: () => _runDiscoveryAction(
+                        'not_interested',
+                        widget.onDiscoveryNotInterested,
+                      ),
+                      onSkip: () =>
+                          _runDiscoveryAction('skip', widget.onDiscoverySkip),
+                      onApply: () =>
+                          _runDiscoveryAction('apply', widget.onDiscoveryApply),
+                    )
+                  : _ApplyBottomBar(
+                      job: job,
+                      application: support.application,
+                      isApplying: _isApplying,
+                      isOpeningChat: _isOpeningChat,
+                      isCheckingApplication: isCheckingApplication,
+                      isAuthenticated: _auth.currentUser != null,
+                      onApply: () => _applyToJob(job),
+                      onOpenChat: () => _openChat(job),
+                    ),
             );
           },
         );
@@ -1127,6 +1181,48 @@ class _BusinessAvatar extends StatelessWidget {
                 color: AppColors.coralAccent,
               ),
             ),
+    );
+  }
+}
+
+class _DiscoveryBottomBar extends StatelessWidget {
+  const _DiscoveryBottomBar({
+    required this.isBusy,
+    required this.onNotInterested,
+    required this.onSkip,
+    required this.onApply,
+  });
+
+  final bool isBusy;
+  final VoidCallback onNotInterested;
+  final VoidCallback onSkip;
+  final VoidCallback onApply;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: const Border(top: BorderSide(color: AppColors.border)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 24,
+              offset: const Offset(0, -10),
+            ),
+          ],
+        ),
+        child: JobDiscoveryActionButtons(
+          isBusy: isBusy,
+          height: 50,
+          onNotInterested: onNotInterested,
+          onSkip: onSkip,
+          onApply: onApply,
+        ),
+      ),
     );
   }
 }
