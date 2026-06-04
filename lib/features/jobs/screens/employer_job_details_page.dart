@@ -5,6 +5,7 @@ import '../../../core/theme/app_ui.dart';
 import '../../applications/screens/employer_applications_page.dart';
 import '../models/employer_job_models.dart';
 import '../services/job_service.dart';
+import 'post_job_screen.dart';
 
 class EmployerJobDetailsPage extends StatefulWidget {
   const EmployerJobDetailsPage({super.key, required this.jobId});
@@ -66,12 +67,6 @@ class _EmployerJobDetailsPageState extends State<EmployerJobDetailsPage> {
     }
   }
 
-  void _showComingSoon(String action) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$action will be available soon')));
-  }
-
   void _openApplicants(EmployerJob job) {
     Navigator.push(
       context,
@@ -80,6 +75,35 @@ class _EmployerJobDetailsPageState extends State<EmployerJobDetailsPage> {
             EmployerApplicationsPage(jobId: job.id, jobTitle: job.title),
       ),
     );
+  }
+
+  Future<void> _openJobEditor(EmployerJob job, {required bool duplicate}) async {
+    try {
+      final jobData = await _jobService.getOwnedJobData(job.id);
+      if (!mounted) return;
+      final changed = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PostJobScreen(
+            editJobId: duplicate ? null : job.id,
+            initialJobData: jobData,
+            isEditMode: !duplicate,
+            isDuplicateMode: duplicate,
+          ),
+        ),
+      );
+      if (changed == true && mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
+    }
   }
 
   Future<void> _confirmDeleteDraft(EmployerJob job) async {
@@ -123,11 +147,11 @@ class _EmployerJobDetailsPageState extends State<EmployerJobDetailsPage> {
         job: job,
         onEdit: () {
           Navigator.pop(context);
-          _showComingSoon('Edit job');
+          _openJobEditor(job, duplicate: false);
         },
         onDuplicate: () {
           Navigator.pop(context);
-          _showComingSoon('Duplicate job');
+          _openJobEditor(job, duplicate: true);
         },
         onApplicants: () {
           Navigator.pop(context);
@@ -136,13 +160,6 @@ class _EmployerJobDetailsPageState extends State<EmployerJobDetailsPage> {
         onPublish: () {
           Navigator.pop(context);
           _runAction(() => _jobService.publishDraft(job.id), 'Job published');
-        },
-        onFilled: () {
-          Navigator.pop(context);
-          _runAction(
-            () => _jobService.markJobAsFilled(job.id),
-            'Job marked as filled',
-          );
         },
         onClose: () {
           Navigator.pop(context);
@@ -1113,7 +1130,6 @@ class _ManagementActionsSheet extends StatelessWidget {
     required this.onDuplicate,
     required this.onApplicants,
     required this.onPublish,
-    required this.onFilled,
     required this.onClose,
     required this.onReopen,
     required this.onDeleteDraft,
@@ -1124,7 +1140,6 @@ class _ManagementActionsSheet extends StatelessWidget {
   final VoidCallback onDuplicate;
   final VoidCallback onApplicants;
   final VoidCallback onPublish;
-  final VoidCallback onFilled;
   final VoidCallback onClose;
   final VoidCallback onReopen;
   final VoidCallback onDeleteDraft;
@@ -1145,11 +1160,6 @@ class _ManagementActionsSheet extends StatelessWidget {
         _SheetAction(Icons.edit_outlined, 'Edit job', onEdit),
         _SheetAction(Icons.groups_outlined, 'View applicants', onApplicants),
         _SheetAction(Icons.copy_rounded, 'Duplicate job', onDuplicate),
-        _SheetAction(
-          Icons.check_circle_outline_rounded,
-          'Mark as filled',
-          onFilled,
-        ),
         _SheetAction(Icons.lock_outline_rounded, 'Close job', onClose),
       ] else ...[
         _SheetAction(Icons.copy_rounded, 'Duplicate job', onDuplicate),
