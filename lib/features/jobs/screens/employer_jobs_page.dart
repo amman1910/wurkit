@@ -43,19 +43,25 @@ class _EmployerJobsPageState extends State<EmployerJobsPage> {
     super.dispose();
   }
 
-  void _openPostJob() {
-    Navigator.push(
+  Future<void> _openPostJob() async {
+    final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => const PostJobScreen()),
     );
+    if (changed == true && mounted) {
+      _refreshLocalSupportData();
+    }
   }
 
-  void _openJob(EmployerJob job) {
+  Future<void> _openJob(EmployerJob job) async {
     HapticFeedback.selectionClick();
-    Navigator.push(
+    final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => EmployerJobDetailsPage(jobId: job.id)),
     );
+    if (changed == true && mounted) {
+      _refreshLocalSupportData();
+    }
   }
 
   Future<void> _runAction(
@@ -82,12 +88,6 @@ class _EmployerJobsPageState extends State<EmployerJobsPage> {
     }
   }
 
-  void _showComingSoon(String action) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$action will be available soon')));
-  }
-
   void _openApplicants(EmployerJob job) {
     Navigator.push(
       context,
@@ -96,6 +96,43 @@ class _EmployerJobsPageState extends State<EmployerJobsPage> {
             EmployerApplicationsPage(jobId: job.id, jobTitle: job.title),
       ),
     );
+  }
+
+  Future<void> _openJobEditor(EmployerJob job, {required bool duplicate}) async {
+    try {
+      final jobData = await _jobService.getOwnedJobData(job.id);
+      if (!mounted) return;
+      final changed = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PostJobScreen(
+            editJobId: duplicate ? null : job.id,
+            initialJobData: jobData,
+            isEditMode: !duplicate,
+            isDuplicateMode: duplicate,
+          ),
+        ),
+      );
+      if (changed == true && mounted) {
+        _refreshLocalSupportData();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
+    }
+  }
+
+  void _refreshLocalSupportData() {
+    setState(() {
+      _profileFuture = _jobService.getCurrentEmployerProfile();
+      _statsFuture = null;
+      _statsJobIdsSignature = null;
+    });
   }
 
   Future<void> _confirmDeleteDraft(EmployerJob job) async {
@@ -135,11 +172,11 @@ class _EmployerJobsPageState extends State<EmployerJobsPage> {
         job: job,
         onEdit: () {
           Navigator.pop(context);
-          _showComingSoon('Edit job');
+          _openJobEditor(job, duplicate: false);
         },
         onDuplicate: () {
           Navigator.pop(context);
-          _showComingSoon('Duplicate job');
+          _openJobEditor(job, duplicate: true);
         },
         onApplicants: () {
           Navigator.pop(context);
@@ -148,13 +185,6 @@ class _EmployerJobsPageState extends State<EmployerJobsPage> {
         onPublish: () {
           Navigator.pop(context);
           _runAction(() => _jobService.publishDraft(job.id), 'Job published');
-        },
-        onFilled: () {
-          Navigator.pop(context);
-          _runAction(
-            () => _jobService.markJobAsFilled(job.id),
-            'Job marked as filled',
-          );
         },
         onClose: () {
           Navigator.pop(context);
@@ -983,7 +1013,6 @@ class _JobActionsSheet extends StatelessWidget {
     required this.onDuplicate,
     required this.onApplicants,
     required this.onPublish,
-    required this.onFilled,
     required this.onClose,
     required this.onReopen,
     required this.onDeleteDraft,
@@ -994,7 +1023,6 @@ class _JobActionsSheet extends StatelessWidget {
   final VoidCallback onDuplicate;
   final VoidCallback onApplicants;
   final VoidCallback onPublish;
-  final VoidCallback onFilled;
   final VoidCallback onClose;
   final VoidCallback onReopen;
   final VoidCallback onDeleteDraft;
@@ -1015,11 +1043,6 @@ class _JobActionsSheet extends StatelessWidget {
         _ActionItem(Icons.edit_outlined, 'Edit job', onEdit),
         _ActionItem(Icons.groups_outlined, 'View applicants', onApplicants),
         _ActionItem(Icons.copy_rounded, 'Duplicate job', onDuplicate),
-        _ActionItem(
-          Icons.check_circle_outline_rounded,
-          'Mark as filled',
-          onFilled,
-        ),
         _ActionItem(Icons.lock_outline_rounded, 'Close job', onClose),
       ] else if (job.isFilled) ...[
         _ActionItem(Icons.groups_outlined, 'View applicants', onApplicants),
