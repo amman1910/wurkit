@@ -75,6 +75,118 @@ class EmployeeJobDiscoveryService {
     return items;
   }
 
+  Future<Set<String>> loadSavedJobIds() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const {};
+    }
+
+    final snapshot = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('savedJobs')
+        .get();
+
+    return snapshot.docs
+        .map((doc) => _readString(doc.data()['jobId']) ?? doc.id)
+        .toSet();
+  }
+
+  Future<List<EmployeeJobDiscoveryItem>> loadSavedJobs() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const [];
+    }
+
+    final savedIds = await loadSavedJobIds();
+    if (savedIds.isEmpty) {
+      return const [];
+    }
+
+    final dismissedIdsFuture = _loadNotInterestedJobIds(user.uid);
+    final appliedIdsFuture = _loadAppliedJobIds(user.uid);
+    final jobDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    final ids = savedIds.toList();
+    for (var start = 0; start < ids.length; start += 10) {
+      final end = start + 10 > ids.length ? ids.length : start + 10;
+      final chunk = ids.sublist(start, end);
+      final snapshot = await _firestore
+          .collection('jobs')
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      jobDocs.addAll(snapshot.docs);
+    }
+
+    final employerIds = jobDocs
+        .map((doc) => _readString(doc.data()['employerId']))
+        .whereType<String>()
+        .toSet()
+        .toList();
+    final employers = await _loadEmployers(employerIds);
+    final dismissedIds = await dismissedIdsFuture;
+    final appliedIds = await appliedIdsFuture;
+
+    final items = jobDocs
+        .where(
+          (doc) =>
+              !dismissedIds.contains(doc.id) && !appliedIds.contains(doc.id),
+        )
+        .map((doc) {
+          final data = doc.data();
+          final employerId = _readString(data['employerId']) ?? '';
+          return EmployeeJobDiscoveryItem.fromFirestore(
+            id: doc.id,
+            data: data,
+            employer:
+                employers[employerId] ?? const EmployeeDiscoveryEmployer(),
+          );
+        })
+        .toList();
+
+    items.sort((a, b) {
+      final aTime = a.publishedAt ?? a.createdAt ?? a.updatedAt;
+      final bTime = b.publishedAt ?? b.createdAt ?? b.updatedAt;
+      return (bTime?.millisecondsSinceEpoch ?? 0).compareTo(
+        aTime?.millisecondsSinceEpoch ?? 0,
+      );
+    });
+    return items;
+  }
+
+  Future<void> saveJob(EmployeeJobDiscoveryItem job) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Please sign in to save jobs.');
+    }
+
+    await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('savedJobs')
+        .doc(job.id)
+        .set({
+          'jobId': job.id,
+          'title': job.title,
+          'businessName': job.businessName,
+          'imageUrl': job.displayImageUrl,
+          'savedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+  }
+
+  Future<void> unsaveJob(String jobId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Please sign in to update saved jobs.');
+    }
+
+    await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('savedJobs')
+        .doc(jobId)
+        .delete();
+  }
+
   Future<void> applyToJob(EmployeeJobDiscoveryItem job) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -114,7 +226,7 @@ class EmployeeJobDiscoveryService {
     await _notificationService.createNotification(
       userId: job.employerId,
       type: 'application_created',
-      title: 'New application received',
+      title: '📩 New Application',
       body: body,
       relatedJobId: job.id,
       relatedApplicationId: applicationRef.id,
