@@ -3,22 +3,32 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import '../../employee_home/screens/employee_main_navigation_page.dart';
+import '../../employer_home/screens/employer_main_navigation_page.dart';
 
 class PushNotificationService {
   PushNotificationService._();
 
   static final PushNotificationService instance = PushNotificationService._();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   StreamSubscription<String>? _tokenRefreshSubscription;
+  StreamSubscription<RemoteMessage>? _messageOpenedSubscription;
   bool _isInitializing = false;
+  bool _tapNavigationInitialized = false;
   String? _initializedUserId;
+  final Set<String> _handledTapMessageKeys = {};
 
   Future<void> initialize() async {
+    _ensureTapNavigationHandlers();
+
     final user = _auth.currentUser;
     if (user == null) {
       debugPrint(
@@ -83,6 +93,120 @@ class PushNotificationService {
     }
   }
 
+  void _ensureTapNavigationHandlers() {
+    if (_tapNavigationInitialized) {
+      return;
+    }
+
+    _tapNavigationInitialized = true;
+
+    FirebaseMessaging.instance
+        .getInitialMessage()
+        .then((message) {
+          if (message == null) {
+            return;
+          }
+          debugPrint(
+            'PushNotificationService: initial push notification tapped',
+          );
+          _handlePushNotificationNavigation(message);
+        })
+        .catchError((Object error, StackTrace stackTrace) {
+          debugPrint(
+            'PushNotificationService: getInitialMessage failed: $error',
+          );
+          debugPrintStack(stackTrace: stackTrace);
+        });
+
+    _messageOpenedSubscription?.cancel();
+    _messageOpenedSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
+      (message) {
+        debugPrint('PushNotificationService: push notification tapped');
+        _handlePushNotificationNavigation(message);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint(
+          'PushNotificationService: onMessageOpenedApp listener error: $error',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      },
+    );
+  }
+
+  Future<void> _handlePushNotificationNavigation(RemoteMessage message) async {
+    final messageKey = _messageKey(message);
+    if (_handledTapMessageKeys.contains(messageKey)) {
+      debugPrint(
+        'PushNotificationService: duplicate push tap skipped key=$messageKey',
+      );
+      return;
+    }
+    _handledTapMessageKeys.add(messageKey);
+
+    final type = (message.data['type'] ?? '').toString().trim();
+    debugPrint('PushNotificationService: notification type detected "$type"');
+
+    final targetTab = _targetTabForNotificationType(type);
+    if (targetTab == null) {
+      debugPrint('PushNotificationService: unknown notification type "$type"');
+      return;
+    }
+
+    final user = _auth.currentUser;
+    if (user == null) {
+      debugPrint(
+        'PushNotificationService: skipped navigation because user is not logged in',
+      );
+      return;
+    }
+
+    String? role;
+    try {
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      role = (userDoc.data()?['role'] as String?)?.trim();
+    } catch (error, stackTrace) {
+      debugPrint('PushNotificationService: failed to detect user role: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+
+    debugPrint(
+      'PushNotificationService: user role detected "$role" '
+      'targetTab=$targetTab',
+    );
+
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      debugPrint(
+        'PushNotificationService: skipped navigation because navigator is unavailable',
+      );
+      return;
+    }
+
+    Widget? page;
+    if (role == 'employee') {
+      page = EmployeeMainNavigationPage(initialIndex: targetTab);
+    } else if (role == 'employer') {
+      page = EmployerMainNavigationPage(initialIndex: targetTab);
+    }
+
+    if (page == null) {
+      debugPrint(
+        'PushNotificationService: skipped navigation because role is unknown',
+      );
+      return;
+    }
+
+    debugPrint(
+      'PushNotificationService: navigating from push tap '
+      'type="$type" targetTab=$targetTab role=$role',
+    );
+
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => page!),
+      (route) => false,
+    );
+  }
+
   Future<void> _saveTokenForUser({
     required String userId,
     required String? token,
@@ -107,4 +231,25 @@ class PushNotificationService {
       debugPrintStack(stackTrace: stackTrace);
     }
   }
+}
+
+int? _targetTabForNotificationType(String type) {
+  if (type == 'chat_message') {
+    return 3;
+  }
+  if (type == 'match_created' || type.startsWith('application_')) {
+    return 2;
+  }
+  return null;
+}
+
+String _messageKey(RemoteMessage message) {
+  final notificationId = message.data['notificationId'];
+  if (notificationId is String && notificationId.trim().isNotEmpty) {
+    return notificationId.trim();
+  }
+  if (message.messageId != null && message.messageId!.trim().isNotEmpty) {
+    return message.messageId!.trim();
+  }
+  return '${message.sentTime?.millisecondsSinceEpoch ?? 0}_${message.data}';
 }
