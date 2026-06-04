@@ -33,17 +33,17 @@ class EmployeeApplicationCard extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: AppColors.surface.withValues(alpha: muted ? 0.62 : 0.9),
+            color: AppColors.surface.withValues(alpha: muted ? 0.58 : 0.82),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: item.isMatch
-                  ? statusStyle.color.withValues(alpha: 0.74)
-                  : AppColors.border,
+                  ? statusStyle.color.withValues(alpha: 0.24)
+                  : AppColors.border.withValues(alpha: 0.88),
             ),
             boxShadow: item.isMatch
                 ? [
                     BoxShadow(
-                      color: statusStyle.color.withValues(alpha: 0.16),
+                      color: statusStyle.color.withValues(alpha: 0.08),
                       blurRadius: 24,
                       offset: const Offset(0, 10),
                     ),
@@ -79,7 +79,7 @@ class EmployeeApplicationCard extends StatelessWidget {
                                 style: TextStyle(
                                   color: muted
                                       ? Colors.white70
-                                      : AppColors.white,
+                                      : const Color(0xFFF3F4F6),
                                   fontSize: 16,
                                   fontWeight: FontWeight.w900,
                                   height: 1.12,
@@ -154,7 +154,7 @@ class _MatchStrip extends StatelessWidget {
         Icon(Icons.celebration_rounded, color: color, size: 17),
         const SizedBox(width: 7),
         Text(
-          "It's a match",
+          "It's a match!",
           style: TextStyle(
             color: color,
             fontWeight: FontWeight.w900,
@@ -330,7 +330,8 @@ class _MiniActionButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           foregroundColor: color,
           disabledForegroundColor: Colors.white38,
-          side: BorderSide(color: color.withValues(alpha: 0.72)),
+          side: BorderSide(color: color.withValues(alpha: 0.76)),
+          backgroundColor: color.withValues(alpha: 0.04),
           padding: const EdgeInsets.symmetric(horizontal: 9),
           minimumSize: const Size(0, 38),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
