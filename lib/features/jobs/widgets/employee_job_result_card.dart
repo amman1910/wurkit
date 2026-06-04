@@ -8,14 +8,20 @@ class EmployeeJobResultCard extends StatelessWidget {
     super.key,
     required this.job,
     required this.isApplying,
+    required this.isSaved,
     required this.onTap,
     required this.onApply,
+    required this.onToggleSaved,
+    this.actionLabel = 'Apply',
   });
 
   final EmployeeJobDiscoveryItem job;
   final bool isApplying;
+  final bool isSaved;
   final VoidCallback onTap;
   final VoidCallback onApply;
+  final VoidCallback onToggleSaved;
+  final String actionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +63,22 @@ class EmployeeJobResultCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Icon(
-                          Icons.bookmark_border_rounded,
-                          color: AppColors.coralAccent,
-                          size: 24,
+                        IconButton(
+                          onPressed: onToggleSaved,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          icon: Icon(
+                            isSaved
+                                ? Icons.bookmark_rounded
+                                : Icons.bookmark_border_rounded,
+                            color: isSaved
+                                ? AppColors.coralAccent
+                                : AppColors.coralAccent,
+                            size: 24,
+                          ),
                         ),
                       ],
                     ),
@@ -127,8 +145,8 @@ class EmployeeJobResultCard extends StatelessWidget {
                                       color: AppColors.navyBg,
                                     ),
                                   )
-                                : const Text(
-                                    'Apply',
+                                : Text(
+                                    actionLabel,
                                     style: TextStyle(
                                       fontWeight: FontWeight.w900,
                                     ),
