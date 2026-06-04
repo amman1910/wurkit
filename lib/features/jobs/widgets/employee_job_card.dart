@@ -7,23 +7,25 @@ class EmployeeJobCard extends StatelessWidget {
   const EmployeeJobCard({
     super.key,
     required this.job,
-    required this.position,
-    required this.total,
+    required this.isSaved,
     required this.onViewDetails,
+    required this.onToggleSaved,
+    required this.actionButtons,
   });
 
   final EmployeeJobDiscoveryItem job;
-  final int position;
-  final int total;
+  final bool isSaved;
   final VoidCallback onViewDetails;
+  final VoidCallback onToggleSaved;
+  final Widget actionButtons;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final imageHeight = constraints.maxHeight.isFinite
-            ? (constraints.maxHeight * 0.30).clamp(126.0, 198.0)
-            : 188.0;
+            ? (constraints.maxHeight * 0.38).clamp(158.0, 248.0)
+            : 220.0;
 
         return Material(
           color: Colors.transparent,
@@ -34,7 +36,9 @@ class EmployeeJobCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.surface.withValues(alpha: 0.92),
                 borderRadius: BorderRadius.circular(26),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(
+                  color: AppColors.coralAccent.withValues(alpha: 0.55),
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.26),
@@ -52,29 +56,34 @@ class EmployeeJobCard extends StatelessWidget {
                       height: imageHeight,
                       child: _JobImageHeader(
                         job: job,
-                        counter: '$position/$total',
+                        isSaved: isSaved,
+                        onToggleSaved: onToggleSaved,
                       ),
                     ),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 11, 16, 12),
+                        padding: const EdgeInsets.fromLTRB(15, 9, 15, 8),
                         child: LayoutBuilder(
                           builder: (context, bodyConstraints) {
-                            final compactBody = bodyConstraints.maxHeight < 285;
-                            final veryCompact = bodyConstraints.maxHeight < 250;
-                            return SizedBox.expand(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.topCenter,
-                                child: SizedBox(
-                                  width: bodyConstraints.maxWidth,
-                                  child: _CardBody(
-                                    job: job,
-                                    compact: compactBody,
-                                    veryCompact: veryCompact,
-                                    onViewDetails: onViewDetails,
-                                  ),
-                                ),
+                            final compactBody = bodyConstraints.maxHeight < 315;
+                            final veryCompact = bodyConstraints.maxHeight < 285;
+                            final body = _CardBody(
+                              job: job,
+                              compact: compactBody,
+                              veryCompact: veryCompact,
+                              fillHeight: !compactBody,
+                              onViewDetails: onViewDetails,
+                              actionButtons: actionButtons,
+                            );
+                            if (!compactBody) {
+                              return body;
+                            }
+                            return FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.topCenter,
+                              child: SizedBox(
+                                width: bodyConstraints.maxWidth,
+                                child: body,
                               ),
                             );
                           },
@@ -97,23 +106,27 @@ class _CardBody extends StatelessWidget {
     required this.job,
     required this.compact,
     required this.veryCompact,
+    required this.fillHeight,
     required this.onViewDetails,
+    required this.actionButtons,
   });
 
   final EmployeeJobDiscoveryItem job;
   final bool compact;
   final bool veryCompact;
+  final bool fillHeight;
   final VoidCallback onViewDetails;
+  final Widget actionButtons;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (job.jobCategory != null) ...[
           _CategoryPill(label: job.jobCategory!, compact: compact),
-          SizedBox(height: veryCompact ? 4 : 6),
+          SizedBox(height: compact ? 4 : 7),
         ],
         Text(
           job.title,
@@ -121,12 +134,12 @@ class _CardBody extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: AppColors.white,
-            fontSize: veryCompact ? 19 : 21,
+            fontSize: compact ? 19 : 22,
             fontWeight: FontWeight.w900,
-            height: 1.06,
+            height: 1.08,
           ),
         ),
-        SizedBox(height: veryCompact ? 4 : 6),
+        SizedBox(height: compact ? 5 : 8),
         Row(
           children: [
             Expanded(
@@ -134,9 +147,7 @@ class _CardBody extends StatelessWidget {
                 job.businessName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.body.copyWith(
-                  fontSize: veryCompact ? 12 : 13,
-                ),
+                style: AppTextStyles.body.copyWith(fontSize: compact ? 12 : 14),
               ),
             ),
             const SizedBox(width: 5),
@@ -147,14 +158,15 @@ class _CardBody extends StatelessWidget {
             ),
           ],
         ),
-        SizedBox(height: veryCompact ? 6 : 8),
+        SizedBox(height: compact ? 7 : 10),
         _InfoGrid(job: job, compact: true),
-        SizedBox(height: veryCompact ? 6 : 8),
+        SizedBox(height: compact ? 7 : 10),
         _SkillWrap(skills: job.requiredSkills, compact: true),
-        SizedBox(height: veryCompact ? 7 : 9),
+        if (fillHeight) const Spacer(),
+        SizedBox(height: compact ? 7 : 10),
         SizedBox(
           width: double.infinity,
-          height: veryCompact ? 38 : 40,
+          height: compact ? 36 : 39,
           child: OutlinedButton.icon(
             onPressed: onViewDetails,
             icon: const Icon(Icons.visibility_outlined, size: 17),
@@ -170,6 +182,19 @@ class _CardBody extends StatelessWidget {
               ),
             ),
           ),
+        ),
+        SizedBox(height: compact ? 6 : 8),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(compact ? 7 : 9),
+          decoration: BoxDecoration(
+            color: AppColors.navyBg.withValues(alpha: 0.28),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.coralAccent.withValues(alpha: 0.42),
+            ),
+          ),
+          child: actionButtons,
         ),
       ],
     );
@@ -225,10 +250,15 @@ class _CategoryPill extends StatelessWidget {
 }
 
 class _JobImageHeader extends StatelessWidget {
-  const _JobImageHeader({required this.job, required this.counter});
+  const _JobImageHeader({
+    required this.job,
+    required this.isSaved,
+    required this.onToggleSaved,
+  });
 
   final EmployeeJobDiscoveryItem job;
-  final String counter;
+  final bool isSaved;
+  final VoidCallback onToggleSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -265,19 +295,20 @@ class _JobImageHeader extends StatelessWidget {
         Positioned(
           right: 16,
           top: 16,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(999),
+          child: IconButton(
+            onPressed: onToggleSaved,
+            icon: Icon(
+              isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
             ),
-            child: Text(
-              counter,
-              style: const TextStyle(
-                color: AppColors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
+            color: isSaved ? AppColors.coralAccent : AppColors.white,
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.black.withValues(alpha: 0.52),
+              side: BorderSide(
+                color: isSaved
+                    ? AppColors.coralAccent.withValues(alpha: 0.78)
+                    : Colors.white24,
               ),
+              shape: const CircleBorder(),
             ),
           ),
         ),
