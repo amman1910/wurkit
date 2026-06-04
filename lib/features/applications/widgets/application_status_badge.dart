@@ -11,9 +11,9 @@ class ApplicationStatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: style.color.withValues(alpha: 0.13),
+        color: style.color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: style.color.withValues(alpha: 0.62)),
+        border: Border.all(color: style.color.withValues(alpha: 0.42)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
