@@ -17,7 +17,9 @@ import '../../notifications/widgets/in_app_notification_banner.dart';
 import 'employer_dashboard_page.dart';
 
 class EmployerMainNavigationPage extends StatefulWidget {
-  const EmployerMainNavigationPage({super.key});
+  const EmployerMainNavigationPage({super.key, this.initialIndex = 0});
+
+  final int initialIndex;
 
   @override
   State<EmployerMainNavigationPage> createState() =>
@@ -52,9 +54,13 @@ class _EmployerMainNavigationPageState
   @override
   void initState() {
     super.initState();
+    _selectedIndex = _clampTabIndex(widget.initialIndex);
     PushNotificationService.instance.initialize();
     _startNotificationListener();
     _startMessageListener();
+    if (_selectedIndex == 2) {
+      unawaited(_markApplicationNotificationsRead());
+    }
   }
 
   @override
@@ -77,7 +83,7 @@ class _EmployerMainNavigationPageState
 
     debugPrint(
       'EmployerMainNavigationPage: notification listener started '
-      'userId=${user.uid} types=application_created',
+      'userId=${user.uid} types=application_created,application_resent',
     );
 
     _notificationSubscription?.cancel();
@@ -87,7 +93,7 @@ class _EmployerMainNavigationPageState
     _notificationSubscription = _notificationService
         .watchLatestUnreadNotificationByTypes(
           userId: user.uid,
-          types: const ['application_created'],
+          types: const ['application_created', 'application_resent'],
         )
         .listen(
           _handleNotificationSnapshot,
@@ -263,7 +269,7 @@ class _EmployerMainNavigationPageState
 
   void _openNotification(AppNotification notification) {
     _dismissBanner();
-    if (notification.type == 'application_created') {
+    if (notification.type.startsWith('application_')) {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => const EmployerApplicationsPage(),
@@ -292,19 +298,41 @@ class _EmployerMainNavigationPageState
   void _onTabSelected(int index) {
     setState(() => _selectedIndex = index);
     if (index == 2) {
-      _markApplicationNotificationsRead();
+      unawaited(_markApplicationNotificationsRead());
     }
+  }
+
+  int _clampTabIndex(int index) {
+    if (index < 0 || index >= _pages.length) {
+      return 0;
+    }
+    return index;
   }
 
   Future<void> _markApplicationNotificationsRead() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
+      debugPrint(
+        'EmployerMainNavigationPage: Applications badge clear skipped '
+        'because user is not logged in',
+      );
       return;
     }
-    await _notificationService.markNotificationsAsReadByTypes(
-      userId: user.uid,
-      types: const ['application_created'],
-    );
+    try {
+      await _notificationService.markNotificationsAsReadByTypes(
+        userId: user.uid,
+        types: const ['application_created', 'application_resent'],
+      );
+      debugPrint(
+        'EmployerMainNavigationPage: badge cleared after entering Applications',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'EmployerMainNavigationPage: failed to clear Applications badge: '
+        '$error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Stream<int> _watchApplicationNotificationCount() {
@@ -314,7 +342,7 @@ class _EmployerMainNavigationPageState
     }
     return _notificationService.watchUnreadCountByTypes(
       userId: user.uid,
-      types: const ['application_created'],
+      types: const ['application_created', 'application_resent'],
     );
   }
 

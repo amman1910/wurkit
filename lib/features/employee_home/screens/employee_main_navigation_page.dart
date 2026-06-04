@@ -18,7 +18,9 @@ import '../../notifications/widgets/in_app_notification_banner.dart';
 import 'employee_home_page.dart';
 
 class EmployeeMainNavigationPage extends StatefulWidget {
-  const EmployeeMainNavigationPage({super.key});
+  const EmployeeMainNavigationPage({super.key, this.initialIndex = 0});
+
+  final int initialIndex;
 
   @override
   State<EmployeeMainNavigationPage> createState() =>
@@ -53,12 +55,16 @@ class _EmployeeMainNavigationPageState
   @override
   void initState() {
     super.initState();
+    _selectedIndex = _clampTabIndex(widget.initialIndex);
     PushNotificationService.instance.initialize();
     _matchSubscription = _matchService.watchUnseenEmployeeMatches().listen(
       _handleUnseenMatches,
       onError: (_) {},
     );
     _startMessageListener();
+    if (_selectedIndex == 2) {
+      unawaited(_markApprovedApplicationsSeen());
+    }
   }
 
   @override
@@ -168,6 +174,34 @@ class _EmployeeMainNavigationPageState
         builder: (_) => ChatDetailPage(chatId: notification.chatId),
       ),
     );
+  }
+
+  int _clampTabIndex(int index) {
+    if (index < 0 || index >= _pages.length) {
+      return 0;
+    }
+    return index;
+  }
+
+  void _onTabSelected(int index) {
+    setState(() => _selectedIndex = index);
+    if (index == 2) {
+      unawaited(_markApprovedApplicationsSeen());
+    }
+  }
+
+  Future<void> _markApprovedApplicationsSeen() async {
+    try {
+      await _applicationService.markApprovedApplicationsSeen();
+      debugPrint(
+        'EmployeeMainNavigationPage: badge cleared after entering Applications',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'EmployeeMainNavigationPage: failed to clear Applications badge: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Future<void> _handleUnseenMatches(
@@ -329,7 +363,7 @@ class _EmployeeMainNavigationPageState
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
+        onTap: _onTabSelected,
         backgroundColor: AppColors.surface,
         selectedItemColor: AppColors.coralAccent,
         unselectedItemColor: Colors.white54,
