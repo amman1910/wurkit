@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,7 +11,18 @@ import '../../../shared/data/israel_cities.dart';
 import '../services/job_service.dart';
 
 class PostJobScreen extends StatefulWidget {
-  const PostJobScreen({super.key});
+  const PostJobScreen({
+    super.key,
+    this.editJobId,
+    this.initialJobData,
+    this.isEditMode = false,
+    this.isDuplicateMode = false,
+  });
+
+  final String? editJobId;
+  final Map<String, dynamic>? initialJobData;
+  final bool isEditMode;
+  final bool isDuplicateMode;
 
   @override
   State<PostJobScreen> createState() => _PostJobScreenState();
@@ -36,6 +48,9 @@ class _PostJobScreenState extends State<PostJobScreen> {
   Map<String, dynamic>? _employerProfile;
   bool _isLoading = false;
   bool _isProfileLoading = true;
+  bool _didApplyInitialJobData = false;
+  List<String> _existingImageUrls = const [];
+  String? _originalMeaningfulSignature;
 
   final Set<String> _selectedSkills = {};
   final Set<String> _customSkills = {};
@@ -247,6 +262,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
             _jobCategory = profileCategories.first;
           }
         }
+        _applyInitialJobDataIfNeeded();
       });
     } catch (_) {
       if (mounted) {
@@ -254,9 +270,72 @@ class _PostJobScreenState extends State<PostJobScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isProfileLoading = false);
+        setState(() {
+          _applyInitialJobDataIfNeeded();
+          _isProfileLoading = false;
+        });
       }
     }
+  }
+
+  bool get _isEditing => widget.isEditMode || widget.editJobId != null;
+
+  bool get _isDuplicating => widget.isDuplicateMode;
+
+  void _applyInitialJobDataIfNeeded() {
+    final data = widget.initialJobData;
+    if (_didApplyInitialJobData || data == null) return;
+
+    _didApplyInitialJobData = true;
+    _titleController.text = _readString(data['title']) ?? '';
+    _descriptionController.text = _readString(data['description']) ?? '';
+
+    final category = _readString(data['jobCategory']);
+    if (category != null) {
+      if (_categoryOptions.contains(category)) {
+        _jobCategory = category;
+      } else {
+        _jobCategory = _customCategoryOption;
+        _customCategoryController.text = category;
+      }
+    }
+
+    _selectedSkills
+      ..clear()
+      ..addAll(_readStringList(data['requiredSkills']));
+    _customSkills.addAll(_selectedSkills);
+
+    _salaryType = _readString(data['salaryType']) ?? _salaryType;
+    _salaryAmount = _readDouble(data['salaryAmount']) ?? _salaryAmount;
+    _salaryAmount = _salaryAmount.clamp(_salaryRange.min, _salaryRange.max);
+
+    final startDate = _readDateTime(data['startDate'] ?? data['date']);
+    final endDate = _readDateTime(data['endDate']);
+    _startDate = startDate;
+    _endDate = endDate;
+    if (data['startAsSoonAsPossible'] == true || startDate == null) {
+      _dateMode = 'asap';
+    } else {
+      _dateMode = endDate == null ? 'specific' : 'range';
+    }
+
+    final location = _readMap(data['location']);
+    final locationType = _readString(location['type']);
+    if (locationType == 'remote' ||
+        locationType == 'business_address' ||
+        locationType == 'custom_address') {
+      _locationType = locationType!;
+    }
+    _cityController.text = _readString(location['city']) ?? '';
+    _addressController.text = _readString(location['address']) ?? '';
+
+    final parsedShifts = _readShiftDrafts(data['shifts']);
+    _shifts
+      ..clear()
+      ..addAll(parsedShifts.isEmpty ? [_ShiftDraft()] : parsedShifts);
+
+    _existingImageUrls = _readStringList(data['imageUrls']);
+    _originalMeaningfulSignature = _meaningfulJobSignature(data);
   }
 
   void _applyProfileSalaryDefault(Map<String, dynamic> profile) {
@@ -408,6 +487,11 @@ class _PostJobScreenState extends State<PostJobScreen> {
   }
 
   Future<void> _saveDraft() async {
+    if (_isEditing || _isDuplicating) {
+      await _saveJob(publish: false);
+      return;
+    }
+
     final title = _titleController.text.trim();
     if (title.isEmpty &&
         (_finalJobCategory == null || _finalJobCategory!.isEmpty)) {
@@ -427,6 +511,13 @@ class _PostJobScreenState extends State<PostJobScreen> {
       _showSnack(error, isError: true);
       return;
     }
+    if (_isDuplicating && !_hasMeaningfulDuplicateChange()) {
+      _showSnack(
+        'Please change at least one job detail before publishing the duplicated job.',
+        isError: true,
+      );
+      return;
+    }
 
     final publish = await _showPreviewSheet();
     if (publish == true) {
@@ -438,21 +529,37 @@ class _PostJobScreenState extends State<PostJobScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final imageUrls = <String>[];
+      var imageUrls = _existingImageUrls;
       if (_selectedImageFile != null) {
-        imageUrls.add(
+        imageUrls = [
           await _jobService.uploadJobImage(imageFile: _selectedImageFile!),
-        );
+        ];
       }
 
-      await _jobService.createJob(
-        publish: publish,
-        jobData: _buildJobData(imageUrls: imageUrls),
-      );
+      final jobData = _buildJobData(imageUrls: imageUrls);
+      if (_isEditing && !_isDuplicating) {
+        final editJobId = widget.editJobId;
+        if (editJobId == null || editJobId.trim().isEmpty) {
+          throw Exception('Job to edit is missing');
+        }
+        await _jobService.updateJob(jobId: editJobId, jobData: jobData);
+      } else {
+        await _jobService.createJob(publish: publish, jobData: jobData);
+      }
 
       if (!mounted) return;
-      _showSnack(publish ? 'Job published successfully.' : 'Draft saved.');
-      _resetForm();
+      _showSnack(
+        _isEditing && !_isDuplicating
+            ? 'Job updated successfully.'
+            : publish
+            ? 'Job published successfully.'
+            : 'Draft saved.',
+      );
+      if (_isEditing || _isDuplicating || publish) {
+        Navigator.of(context).pop(true);
+      } else {
+        _resetForm();
+      }
     } catch (error) {
       if (mounted) {
         _showSnack('Failed to save job: $error', isError: true);
@@ -493,6 +600,13 @@ class _PostJobScreenState extends State<PostJobScreen> {
       'location': _locationData(),
       'imageUrls': imageUrls,
     };
+  }
+
+  bool _hasMeaningfulDuplicateChange() {
+    final original = _originalMeaningfulSignature;
+    if (original == null) return true;
+    return _meaningfulJobSignature(_buildJobData(imageUrls: _existingImageUrls)) !=
+        original;
   }
 
   Map<String, dynamic> _locationData() {
@@ -709,8 +823,12 @@ class _PostJobScreenState extends State<PostJobScreen> {
           icon: const Icon(Icons.arrow_back, color: AppColors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Post job',
+        title: Text(
+          _isDuplicating
+              ? 'Duplicate job'
+              : _isEditing
+              ? 'Edit job'
+              : 'Post job',
           style: TextStyle(
             color: AppColors.white,
             fontSize: 20,
@@ -1118,46 +1236,13 @@ class _PostJobScreenState extends State<PostJobScreen> {
                 const _FormDivider(),
                 _FormSection(
                   title: 'Actions',
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 46,
-                          child: OutlinedButton(
-                            onPressed: busy ? null : _saveDraft,
-                            style: AppButtonStyles.secondaryOutline(),
-                            child: const Text('Save draft'),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: SizedBox(
-                          height: 46,
-                          child: ElevatedButton(
-                            onPressed: busy ? null : _previewAndPublish,
-                            style: AppButtonStyles.primary(
-                              foregroundColor: AppColors.navyBg,
-                            ),
-                            child: busy
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.2,
-                                      color: AppColors.navyBg,
-                                    ),
-                                  )
-                                : Text(
-                                    'Preview & Publish',
-                                    style: AppTextStyles.buttonLabel(
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: _FormActions(
+                    busy: busy,
+                    isEditMode: _isEditing && !_isDuplicating,
+                    isDuplicateMode: _isDuplicating,
+                    onSaveDraft: _saveDraft,
+                    onSaveChanges: () => _saveJob(publish: false),
+                    onPublish: _previewAndPublish,
                   ),
                 ),
               ],
@@ -1858,6 +1943,107 @@ class _ShiftDraft {
   TimeOfDay? endTime;
 }
 
+class _FormActions extends StatelessWidget {
+  const _FormActions({
+    required this.busy,
+    required this.isEditMode,
+    required this.isDuplicateMode,
+    required this.onSaveDraft,
+    required this.onSaveChanges,
+    required this.onPublish,
+  });
+
+  final bool busy;
+  final bool isEditMode;
+  final bool isDuplicateMode;
+  final VoidCallback onSaveDraft;
+  final VoidCallback onSaveChanges;
+  final VoidCallback onPublish;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isEditMode) {
+      return SizedBox(
+        width: double.infinity,
+        height: 46,
+        child: ElevatedButton(
+          onPressed: busy ? null : onSaveChanges,
+          style: AppButtonStyles.primary(foregroundColor: AppColors.navyBg),
+          child: busy
+              ? const _ButtonProgress()
+              : Text('Save changes', style: AppTextStyles.buttonLabel()),
+        ),
+      );
+    }
+
+    if (isDuplicateMode) {
+      return SizedBox(
+        width: double.infinity,
+        height: 46,
+        child: ElevatedButton(
+          onPressed: busy ? null : onPublish,
+          style: AppButtonStyles.primary(foregroundColor: AppColors.navyBg),
+          child: busy
+              ? const _ButtonProgress()
+              : Text(
+                  'Preview & Publish',
+                  style: AppTextStyles.buttonLabel(fontSize: 14),
+                ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 46,
+            child: OutlinedButton(
+              onPressed: busy ? null : onSaveDraft,
+              style: AppButtonStyles.secondaryOutline(),
+              child: const Text('Save draft'),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: SizedBox(
+            height: 46,
+            child: ElevatedButton(
+              onPressed: busy ? null : onPublish,
+              style: AppButtonStyles.primary(
+                foregroundColor: AppColors.navyBg,
+              ),
+              child: busy
+                  ? const _ButtonProgress()
+                  : Text(
+                      'Preview & Publish',
+                      style: AppTextStyles.buttonLabel(fontSize: 14),
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ButtonProgress extends StatelessWidget {
+  const _ButtonProgress();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 20,
+      height: 20,
+      child: CircularProgressIndicator(
+        strokeWidth: 2.2,
+        color: AppColors.navyBg,
+      ),
+    );
+  }
+}
+
 class _SalaryRange {
   const _SalaryRange(this.min, this.max, this.initial);
 
@@ -2004,4 +2190,83 @@ String? _readString(Object? value) {
 double? _readDouble(Object? value) {
   if (value is num) return value.toDouble();
   return null;
+}
+
+DateTime? _readDateTime(Object? value) {
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  return null;
+}
+
+List<_ShiftDraft> _readShiftDrafts(Object? value) {
+  if (value is! List) return const [];
+  return value.whereType<Map>().map((shiftData) {
+    return _ShiftDraft()
+      ..startTime = _parseTimeOfDay(_readString(shiftData['startTime']))
+      ..endTime = _parseTimeOfDay(_readString(shiftData['endTime']));
+  }).where((shift) {
+    return shift.startTime != null || shift.endTime != null;
+  }).toList();
+}
+
+TimeOfDay? _parseTimeOfDay(String? value) {
+  if (value == null) return null;
+  final parts = value.split(':');
+  if (parts.length != 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
+String _meaningfulJobSignature(Map<String, dynamic> data) {
+  final meaningful = {
+    'title': _readString(data['title']) ?? '',
+    'description': _readString(data['description']) ?? '',
+    'jobCategory': _readString(data['jobCategory']) ?? '',
+    'requiredSkills': _normalizedStringList(data['requiredSkills']),
+    'salaryAmount': _readDouble(data['salaryAmount']),
+    'salaryType': _readString(data['salaryType']) ?? '',
+    'startAsSoonAsPossible': data['startAsSoonAsPossible'] == true,
+    'startDate': _normalizedDate(data['startDate'] ?? data['date']),
+    'endDate': _normalizedDate(data['endDate']),
+    'shifts': _normalizedShifts(data['shifts']),
+    'location': _normalizedLocation(data['location']),
+    'urgent': data['urgent'] == true,
+  };
+  return jsonEncode(meaningful);
+}
+
+List<String> _normalizedStringList(Object? value) {
+  final list = _readStringList(value);
+  list.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return list;
+}
+
+String? _normalizedDate(Object? value) {
+  final date = _readDateTime(value);
+  if (date == null) return _readString(value);
+  return DateTime(date.year, date.month, date.day).toIso8601String();
+}
+
+List<Map<String, String>> _normalizedShifts(Object? value) {
+  if (value is! List) return const [];
+  return value.whereType<Map>().map((shiftData) {
+    return {
+      'startTime': _readString(shiftData['startTime']) ?? '',
+      'endTime': _readString(shiftData['endTime']) ?? '',
+    };
+  }).toList();
+}
+
+Map<String, Object?> _normalizedLocation(Object? value) {
+  final location = _readMap(value);
+  return {
+    'type': _readString(location['type']) ?? '',
+    'city': _readString(location['city']) ?? '',
+    'address': _readString(location['address']) ?? '',
+    'lat': _readDouble(location['lat']),
+    'lng': _readDouble(location['lng']),
+  };
 }
