@@ -12,6 +12,10 @@ import '../services/employee_application_service.dart';
 import '../widgets/application_status_badge.dart';
 import '../widgets/employee_application_card.dart';
 
+const Color _softWhite = Color(0xFFF3F4F6);
+const Color _softText = Color(0xFFCBD5E1);
+const Color _deepSurface = Color(0xFF101D35);
+
 enum _ApplicationFilter { all, pending, approved, rejected, cancelled }
 
 enum _ApplicationSort { matchesFirst, newestFirst, oldestFirst }
@@ -372,15 +376,15 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
                           const _Header(),
                           const SizedBox(height: 18),
                           _SearchField(controller: _searchController),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
                           _FilterChips(
                             value: _filter,
                             onChanged: (value) =>
                                 setState(() => _filter = value),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           _StatsRow(stats: stats),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 14),
                           _ResultsHeader(
                             count: visible.length,
                             sort: _sort,
@@ -546,11 +550,36 @@ class _FilterChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final filters = [
-      (_ApplicationFilter.all, 'All', null),
-      (_ApplicationFilter.pending, 'Pending', 'pending'),
-      (_ApplicationFilter.approved, 'Matches', 'approved'),
-      (_ApplicationFilter.rejected, 'Rejected', 'rejected'),
-      (_ApplicationFilter.cancelled, 'Cancelled', 'cancelled'),
+      (
+        _ApplicationFilter.all,
+        'All',
+        AppColors.coralAccent,
+        Icons.grid_view_rounded,
+      ),
+      (
+        _ApplicationFilter.pending,
+        'Pending',
+        ApplicationStatusStyle.pending.color,
+        Icons.schedule_rounded,
+      ),
+      (
+        _ApplicationFilter.approved,
+        'Matches',
+        ApplicationStatusStyle.approved.color,
+        Icons.check_circle_outline_rounded,
+      ),
+      (
+        _ApplicationFilter.rejected,
+        'Rejected',
+        ApplicationStatusStyle.rejected.color,
+        Icons.cancel_outlined,
+      ),
+      (
+        _ApplicationFilter.cancelled,
+        'Cancelled',
+        ApplicationStatusStyle.cancelled.color,
+        Icons.remove_circle_outline_rounded,
+      ),
     ];
 
     return SingleChildScrollView(
@@ -559,28 +588,90 @@ class _FilterChips extends StatelessWidget {
       child: Row(
         children: filters.map((filter) {
           final selected = value == filter.$1;
-          final status = filter.$3;
-          final color = status == null
-              ? AppColors.coralAccent
-              : ApplicationStatusStyle.fromStatus(status).color;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
+            child: _PremiumFilterChip(
               selected: selected,
-              showCheckmark: false,
-              avatar: status == null ? null : TinyStatusDot(status: status),
-              label: Text(filter.$2),
-              onSelected: (_) => onChanged(filter.$1),
-              selectedColor: color,
-              backgroundColor: Colors.transparent,
-              side: BorderSide(color: selected ? color : AppColors.border),
-              labelStyle: TextStyle(
-                color: selected ? AppColors.navyBg : AppColors.lightText,
-                fontWeight: FontWeight.w800,
-              ),
+              label: filter.$2,
+              accent: filter.$3,
+              icon: filter.$4,
+              onTap: () => onChanged(filter.$1),
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+class _PremiumFilterChip extends StatelessWidget {
+  const _PremiumFilterChip({
+    required this.selected,
+    required this.label,
+    required this.accent,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final String label;
+  final Color accent;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? AppColors.coralAccent : _softText;
+    final leadingColor = selected ? AppColors.coralAccent : accent;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: Ink(
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.coralAccent.withValues(alpha: 0.1)
+                : _deepSurface.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: selected
+                  ? AppColors.coralAccent
+                  : AppColors.border.withValues(alpha: 0.86),
+              width: selected ? 1.4 : 1,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: AppColors.coralAccent.withValues(alpha: 0.13),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (label == 'All')
+                Icon(icon, color: leadingColor, size: 15)
+              else
+                _StatusAccentDot(color: leadingColor, size: 8),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -594,47 +685,124 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tiles = [
-      ('All', stats.all, AppColors.white),
-      ('Pending', stats.pending, ApplicationStatusStyle.pending.color),
-      ('Matches', stats.approved, ApplicationStatusStyle.approved.color),
-      ('Rejected', stats.rejected, ApplicationStatusStyle.rejected.color),
+      ('All', stats.all, AppColors.coralAccent, Icons.business_center_outlined),
+      (
+        'Pending',
+        stats.pending,
+        ApplicationStatusStyle.pending.color,
+        Icons.schedule_rounded,
+      ),
+      (
+        'Matches',
+        stats.approved,
+        ApplicationStatusStyle.approved.color,
+        Icons.check_circle_outline_rounded,
+      ),
+      (
+        'Rejected',
+        stats.rejected,
+        ApplicationStatusStyle.rejected.color,
+        Icons.cancel_outlined,
+      ),
     ];
     return Row(
       children: tiles.map((tile) {
         return Expanded(
           child: Padding(
             padding: EdgeInsets.only(right: tile == tiles.last ? 0 : 8),
-            child: Container(
-              height: 70,
-              decoration: BoxDecoration(
-                color: AppColors.surface.withValues(alpha: 0.78),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    tile.$2.toString(),
-                    style: TextStyle(
-                      color: tile.$3,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    tile.$1,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.label.copyWith(fontSize: 11),
-                  ),
-                ],
-              ),
+            child: _StatTile(
+              label: tile.$1,
+              value: tile.$2,
+              accent: tile.$3,
+              icon: tile.$4,
             ),
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.accent,
+    required this.icon,
+  });
+
+  final String label;
+  final int value;
+  final Color accent;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 84,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.82)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+              border: Border.all(color: accent.withValues(alpha: 0.18)),
+            ),
+            child: Icon(icon, color: accent, size: 16),
+          ),
+          const Spacer(),
+          Text(
+            value.toString(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _softWhite,
+              fontSize: 23,
+              fontWeight: FontWeight.w900,
+              height: 0.98,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (label != 'All') ...[
+                _StatusAccentDot(color: accent, size: 6.5),
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _softText,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -657,7 +825,11 @@ class _ResultsHeader extends StatelessWidget {
         Expanded(
           child: Text(
             '$count ${count == 1 ? 'Application' : 'Applications'}',
-            style: AppTextStyles.body,
+            style: const TextStyle(
+              color: _softText,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         TextButton(
@@ -698,6 +870,32 @@ class _ResultsHeader extends StatelessWidget {
       _ApplicationSort.newestFirst => 'Newest',
       _ApplicationSort.oldestFirst => 'Oldest',
     };
+  }
+}
+
+class _StatusAccentDot extends StatelessWidget {
+  const _StatusAccentDot({required this.color, this.size = 8});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.24),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+    );
   }
 }
 
