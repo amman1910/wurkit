@@ -48,6 +48,24 @@ class JobService {
     return uploadTask.ref.getDownloadURL();
   }
 
+  Future<Map<String, dynamic>> getOwnedJobData(String jobId) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      throw Exception('User not authenticated');
+    }
+
+    final snapshot = await _firestore.collection('jobs').doc(jobId).get();
+    final data = snapshot.data();
+    if (data == null) {
+      throw Exception('Job not found');
+    }
+    if (data['employerId'] != currentUser.uid) {
+      throw Exception('You can only manage your own jobs');
+    }
+
+    return data;
+  }
+
   /// Creates a draft or published job document in Firestore.
   Future<void> createJob({
     required Map<String, dynamic> jobData,
@@ -71,6 +89,45 @@ class JobService {
 
     data.removeWhere((_, value) => value == null);
     await _firestore.collection('jobs').add(data);
+  }
+
+  Future<void> updateJob({
+    required String jobId,
+    required Map<String, dynamic> jobData,
+  }) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      throw Exception('User not authenticated');
+    }
+
+    await _assertOwnsJob(jobId, currentUser.uid);
+
+    const editableFields = {
+      'title',
+      'description',
+      'jobCategory',
+      'jobCategorySource',
+      'requiredSkills',
+      'salaryAmount',
+      'salaryType',
+      'startAsSoonAsPossible',
+      'startDate',
+      'endDate',
+      'urgent',
+      'shifts',
+      'location',
+      'imageUrls',
+    };
+
+    final update = <String, dynamic>{};
+    for (final field in editableFields) {
+      if (jobData.containsKey(field)) {
+        update[field] = jobData[field];
+      }
+    }
+    update['updatedAt'] = FieldValue.serverTimestamp();
+
+    await _firestore.collection('jobs').doc(jobId).update(update);
   }
 
   /// Stream of open jobs sorted by createdAt descending
