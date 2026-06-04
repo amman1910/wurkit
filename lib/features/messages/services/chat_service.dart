@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+
+import '../../notifications/services/notification_service.dart';
 
 class MessageBannerNotification {
   const MessageBannerNotification({
@@ -30,12 +33,22 @@ class MessageBannerNotification {
 }
 
 class ChatService {
-  ChatService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
-    : _auth = firebaseAuth ?? FirebaseAuth.instance,
-      _firestore = firestore ?? FirebaseFirestore.instance;
+  ChatService({
+    FirebaseAuth? firebaseAuth,
+    FirebaseFirestore? firestore,
+    NotificationService? notificationService,
+  }) : _auth = firebaseAuth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _notificationService =
+           notificationService ??
+           NotificationService(
+             firebaseAuth: firebaseAuth,
+             firestore: firestore,
+           );
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  final NotificationService _notificationService;
 
   Stream<int> watchTotalUnreadCount() {
     final currentUser = _auth.currentUser;
@@ -218,6 +231,66 @@ class ChatService {
     });
 
     await batch.commit();
+
+    await _createChatMessageNotification(
+      chatId: chatId,
+      chatData: chatData,
+      senderId: currentUser.uid,
+      receiverId: receiverId,
+      messageText: trimmedText,
+    );
+  }
+
+  Future<void> _createChatMessageNotification({
+    required String chatId,
+    required Map<String, dynamic> chatData,
+    required String senderId,
+    required String receiverId,
+    required String messageText,
+  }) async {
+    if (receiverId.trim().isEmpty || receiverId == senderId) {
+      debugPrint(
+        'ChatService.sendMessage chat notification skipped because '
+        'receiverId missing chatId=$chatId senderId=$senderId',
+      );
+      return;
+    }
+
+    final participantNames = _readMap(chatData['participantNames']);
+    final participantImages = _readMap(chatData['participantImages']);
+    final senderName = _readString(
+      participantNames,
+      senderId,
+      _auth.currentUser?.displayName?.trim().isNotEmpty == true
+          ? _auth.currentUser!.displayName!.trim()
+          : 'New message',
+    );
+    final senderImageUrl = _readString(participantImages, senderId, '');
+    final notificationBody = '$senderName sent you a message';
+
+    try {
+      await _notificationService.createNotification(
+        userId: receiverId,
+        senderId: senderId,
+        type: 'chat_message',
+        title: '💬 New Message',
+        body: notificationBody,
+        relatedChatId: chatId,
+        relatedJobId: _readString(chatData, 'jobId', ''),
+        relatedApplicationId: _readString(chatData, 'applicationId', ''),
+        senderName: senderName,
+        senderImageUrl: senderImageUrl,
+      );
+      debugPrint(
+        'ChatService.sendMessage chat notification created '
+        'chatId=$chatId receiverId=$receiverId senderId=$senderId',
+      );
+    } catch (error) {
+      debugPrint(
+        'ChatService.sendMessage failed to create chat notification '
+        'chatId=$chatId receiverId=$receiverId: $error',
+      );
+    }
   }
 
   Future<void> markChatAsRead(String chatId) async {
