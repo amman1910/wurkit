@@ -100,6 +100,31 @@ class EmployeeJobDiscoveryItem {
     return 'Time TBD';
   }
 
+  int? get shiftStartMinutes {
+    for (final shift in shifts) {
+      final minutes = _readTimeMinutes(shift);
+      if (minutes != null) {
+        return minutes;
+      }
+    }
+    return null;
+  }
+
+  int? get shiftEndMinutes {
+    for (final shift in shifts) {
+      final matches = RegExp(r'(\d{1,2}):(\d{2})').allMatches(shift).toList();
+      if (matches.isNotEmpty) {
+        final match = matches.length > 1 ? matches.last : matches.first;
+        final hour = int.tryParse(match.group(1)!);
+        final minute = int.tryParse(match.group(2)!);
+        if (hour != null && minute != null) {
+          return hour * 60 + minute;
+        }
+      }
+    }
+    return null;
+  }
+
   String get locationText {
     return location ??
         employer.city ??
@@ -235,6 +260,19 @@ String? _readString(Object? value) {
 
 bool? _readBool(Object? value) {
   return value is bool ? value : null;
+}
+
+int? _readTimeMinutes(String value) {
+  final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(value);
+  if (match == null) {
+    return null;
+  }
+  final hour = int.tryParse(match.group(1)!);
+  final minute = int.tryParse(match.group(2)!);
+  if (hour == null || minute == null) {
+    return null;
+  }
+  return hour * 60 + minute;
 }
 
 double? _readDouble(Object? value) {
