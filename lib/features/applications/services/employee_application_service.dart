@@ -168,7 +168,7 @@ class EmployeeApplicationService {
     final employeeName = await _loadEmployeeName(user.uid);
     final jobTitle = _readString(job['title']);
     final body = _resendNotificationBody(employeeName, jobTitle);
-    const title = 'Application resent';
+    const title = '📩 New Application';
 
     debugPrint(
       'EmployeeApplicationService.resendCancelledApplication: creating '
