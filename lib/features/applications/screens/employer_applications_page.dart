@@ -215,7 +215,13 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      _Header(searchController: _searchController),
+                      _Header(
+                        searchController: _searchController,
+                        jobTitle: widget.jobTitle,
+                        showBackButton:
+                            widget.jobId != null &&
+                            widget.jobId!.trim().isNotEmpty,
+                      ),
                       const SizedBox(height: 18),
                       _StatsRow(stats: stats),
                       const SizedBox(height: 18),
@@ -263,30 +269,50 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.searchController});
+  const _Header({
+    required this.searchController,
+    required this.showBackButton,
+    this.jobTitle,
+  });
 
   final TextEditingController searchController;
+  final bool showBackButton;
+  final String? jobTitle;
 
   @override
   Widget build(BuildContext context) {
+    final cleanJobTitle = jobTitle?.trim();
+    final hasJobTitle = cleanJobTitle != null && cleanJobTitle.isNotEmpty;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Expanded(
+        if (showBackButton) ...[
+          _RoundIconButton(
+            icon: Icons.arrow_back_rounded,
+            onTap: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Applications',
-                style: TextStyle(
+                !hasJobTitle
+                    ? 'Applications'
+                    : 'Applicants for $cleanJobTitle',
+                style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 30,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 6),
               Text(
-                'Review candidates and respond quickly',
+                !hasJobTitle
+                    ? 'Review candidates and respond quickly'
+                    : 'Review candidates for this job',
                 style: AppTextStyles.body,
               ),
             ],
