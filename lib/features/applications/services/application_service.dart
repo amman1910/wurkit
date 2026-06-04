@@ -1,13 +1,26 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+
+import '../../notifications/services/notification_service.dart';
 
 class ApplicationService {
-  ApplicationService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
-    : _auth = firebaseAuth ?? FirebaseAuth.instance,
-      _firestore = firestore ?? FirebaseFirestore.instance;
+  ApplicationService({
+    FirebaseAuth? firebaseAuth,
+    FirebaseFirestore? firestore,
+    NotificationService? notificationService,
+  }) : _auth = firebaseAuth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _notificationService =
+           notificationService ??
+           NotificationService(
+             firebaseAuth: firebaseAuth,
+             firestore: firestore,
+           );
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  final NotificationService _notificationService;
 
   String _readString(Map<String, dynamic>? data, String key, String fallback) {
     final value = data?[key];
@@ -268,165 +281,283 @@ class ApplicationService {
         .collection('applications')
         .doc(applicationId);
 
-    await _firestore.runTransaction((transaction) async {
-      final applicationDoc = await transaction.get(applicationRef);
+    final matchNotification = await _firestore
+        .runTransaction<_MatchNotificationPayload?>((transaction) async {
+          final applicationDoc = await transaction.get(applicationRef);
 
-      if (!applicationDoc.exists) {
-        throw Exception('Application not found');
-      }
+          if (!applicationDoc.exists) {
+            throw Exception('Application not found');
+          }
 
-      final applicationData = applicationDoc.data();
-      if (applicationData == null) {
-        throw Exception('Application data is unavailable');
-      }
+          final applicationData = applicationDoc.data();
+          if (applicationData == null) {
+            throw Exception('Application data is unavailable');
+          }
 
-      final employerId = applicationData['employerId'] as String?;
-      if (employerId != currentUser.uid) {
-        throw Exception('You can only update applications for your own jobs');
-      }
+          final employerId = applicationData['employerId'] as String?;
+          if (employerId != currentUser.uid) {
+            throw Exception(
+              'You can only update applications for your own jobs',
+            );
+          }
 
-      if (status == 'rejected') {
-        transaction.update(applicationRef, {
-          'status': 'rejected',
-          'rejectedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
+          if (status == 'rejected') {
+            transaction.update(applicationRef, {
+              'status': 'rejected',
+              'rejectedAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+            return null;
+          }
+
+          if (status == 'pending') {
+            transaction.update(applicationRef, {
+              'status': 'pending',
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+            return null;
+          }
+
+          final existingMatchId = applicationData['matchId'] as String?;
+          final existingChatId = applicationData['chatId'] as String?;
+          if (existingMatchId?.trim().isNotEmpty == true &&
+              existingChatId?.trim().isNotEmpty == true) {
+            transaction.update(applicationRef, {
+              'status': 'approved',
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+            debugPrint(
+              'ApplicationService.updateApplicationStatus match notification '
+              'skipped because duplicate match/chat already exists '
+              'applicationId=$applicationId matchId=$existingMatchId '
+              'chatId=$existingChatId',
+            );
+            return null;
+          }
+
+          final jobId = applicationData['jobId'] as String?;
+          final employeeId = applicationData['employeeId'] as String?;
+          if (jobId == null || jobId.trim().isEmpty) {
+            throw Exception('Application job is missing');
+          }
+          if (employeeId == null || employeeId.trim().isEmpty) {
+            throw Exception('Application employee is missing');
+          }
+
+          final jobRef = _firestore.collection('jobs').doc(jobId);
+          final employeeProfileRef = _firestore
+              .collection('employeeProfiles')
+              .doc(employeeId);
+          final employerProfileRef = _firestore
+              .collection('employerProfiles')
+              .doc(employerId);
+
+          final jobDoc = await transaction.get(jobRef);
+          final employeeProfileDoc = await transaction.get(employeeProfileRef);
+          final employerProfileDoc = await transaction.get(employerProfileRef);
+
+          final jobData = jobDoc.data();
+          final employeeProfileData = employeeProfileDoc.data();
+          final employerProfileData = employerProfileDoc.data();
+
+          final employeeName = _readString(
+            applicationData,
+            'employeeName',
+            _readString(employeeProfileData, 'name', 'Worker'),
+          );
+          final employeeImageUrl = _readString(
+            employeeProfileData,
+            'profileImageUrl',
+            '',
+          );
+          final employerName = _readString(
+            employerProfileData,
+            'businessName',
+            'Business',
+          );
+          final employerImageUrl = _readString(
+            employerProfileData,
+            'businessLogoUrl',
+            '',
+          );
+          final jobTitle = _readString(
+            applicationData,
+            'jobTitle',
+            _readString(
+              jobData,
+              'title',
+              _readString(jobData, 'jobTitle', 'Job'),
+            ),
+          );
+
+          final matchRef = _firestore.collection('matches').doc();
+          final chatRef = _firestore.collection('chats').doc();
+
+          final matchData = <String, dynamic>{
+            'matchId': matchRef.id,
+            'applicationId': applicationId,
+            'jobId': jobId,
+            'employeeId': employeeId,
+            'employerId': employerId,
+            'employeeName': employeeName,
+            'employeeImageUrl': employeeImageUrl,
+            'employerName': employerName,
+            'employerImageUrl': employerImageUrl,
+            'jobTitle': jobTitle,
+            'chatId': chatRef.id,
+            'status': 'active',
+            'seenByEmployee': false,
+            'seenByEmployeeAt': null,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          };
+          _addOptionalField(matchData, 'jobLocation', jobData, 'location');
+          _addOptionalField(matchData, 'workDate', jobData, 'workDate');
+          _addOptionalField(matchData, 'salaryAmount', jobData, 'salaryAmount');
+          _addOptionalField(matchData, 'paymentType', jobData, 'paymentType');
+
+          final chatData = <String, dynamic>{
+            'chatId': chatRef.id,
+            'matchId': matchRef.id,
+            'applicationId': applicationId,
+            'jobId': jobId,
+            'employeeId': employeeId,
+            'employerId': employerId,
+            'participants': [employeeId, employerId],
+            'participantNames': {
+              employeeId: employeeName,
+              employerId: employerName,
+            },
+            'participantImages': {
+              employeeId: employeeImageUrl,
+              employerId: employerImageUrl,
+            },
+            'jobTitle': jobTitle,
+            'lastMessage': '',
+            'lastMessageAt': null,
+            'lastMessageSenderId': null,
+            'unreadCounts': {employeeId: 0, employerId: 0},
+            'isActive': true,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          };
+
+          transaction.update(applicationRef, {
+            'status': 'approved',
+            'matchId': matchRef.id,
+            'chatId': chatRef.id,
+            'approvedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          transaction.set(matchRef, matchData);
+          transaction.set(chatRef, chatData);
+
+          return _MatchNotificationPayload(
+            applicationId: applicationId,
+            jobId: jobId,
+            chatId: chatRef.id,
+            employeeId: employeeId,
+            employerId: currentUser.uid,
+            employerName: employerName,
+            employerImageUrl: employerImageUrl,
+          );
         });
-        return;
-      }
 
-      if (status == 'pending') {
-        transaction.update(applicationRef, {
-          'status': 'pending',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        return;
-      }
+    if (matchNotification == null) {
+      return;
+    }
 
-      final existingMatchId = applicationData['matchId'] as String?;
-      final existingChatId = applicationData['chatId'] as String?;
-      if (existingMatchId?.trim().isNotEmpty == true &&
-          existingChatId?.trim().isNotEmpty == true) {
-        transaction.update(applicationRef, {
-          'status': 'approved',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        return;
-      }
-
-      final jobId = applicationData['jobId'] as String?;
-      final employeeId = applicationData['employeeId'] as String?;
-      if (jobId == null || jobId.trim().isEmpty) {
-        throw Exception('Application job is missing');
-      }
-      if (employeeId == null || employeeId.trim().isEmpty) {
-        throw Exception('Application employee is missing');
-      }
-
-      final jobRef = _firestore.collection('jobs').doc(jobId);
-      final employeeProfileRef = _firestore
-          .collection('employeeProfiles')
-          .doc(employeeId);
-      final employerProfileRef = _firestore
-          .collection('employerProfiles')
-          .doc(employerId);
-
-      final jobDoc = await transaction.get(jobRef);
-      final employeeProfileDoc = await transaction.get(employeeProfileRef);
-      final employerProfileDoc = await transaction.get(employerProfileRef);
-
-      final jobData = jobDoc.data();
-      final employeeProfileData = employeeProfileDoc.data();
-      final employerProfileData = employerProfileDoc.data();
-
-      final employeeName = _readString(
-        applicationData,
-        'employeeName',
-        _readString(employeeProfileData, 'name', 'Worker'),
-      );
-      final employeeImageUrl = _readString(
-        employeeProfileData,
-        'profileImageUrl',
-        '',
-      );
-      final employerName = _readString(
-        employerProfileData,
-        'businessName',
-        'Business',
-      );
-      final employerImageUrl = _readString(
-        employerProfileData,
-        'businessLogoUrl',
-        '',
-      );
-      final jobTitle = _readString(
-        applicationData,
-        'jobTitle',
-        _readString(jobData, 'title', _readString(jobData, 'jobTitle', 'Job')),
-      );
-
-      final matchRef = _firestore.collection('matches').doc();
-      final chatRef = _firestore.collection('chats').doc();
-
-      final matchData = <String, dynamic>{
-        'matchId': matchRef.id,
-        'applicationId': applicationId,
-        'jobId': jobId,
-        'employeeId': employeeId,
-        'employerId': employerId,
-        'employeeName': employeeName,
-        'employeeImageUrl': employeeImageUrl,
-        'employerName': employerName,
-        'employerImageUrl': employerImageUrl,
-        'jobTitle': jobTitle,
-        'chatId': chatRef.id,
-        'status': 'active',
-        'seenByEmployee': false,
-        'seenByEmployeeAt': null,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      _addOptionalField(matchData, 'jobLocation', jobData, 'location');
-      _addOptionalField(matchData, 'workDate', jobData, 'workDate');
-      _addOptionalField(matchData, 'salaryAmount', jobData, 'salaryAmount');
-      _addOptionalField(matchData, 'paymentType', jobData, 'paymentType');
-
-      final chatData = <String, dynamic>{
-        'chatId': chatRef.id,
-        'matchId': matchRef.id,
-        'applicationId': applicationId,
-        'jobId': jobId,
-        'employeeId': employeeId,
-        'employerId': employerId,
-        'participants': [employeeId, employerId],
-        'participantNames': {
-          employeeId: employeeName,
-          employerId: employerName,
-        },
-        'participantImages': {
-          employeeId: employeeImageUrl,
-          employerId: employerImageUrl,
-        },
-        'jobTitle': jobTitle,
-        'lastMessage': '',
-        'lastMessageAt': null,
-        'lastMessageSenderId': null,
-        'unreadCounts': {employeeId: 0, employerId: 0},
-        'isActive': true,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      transaction.update(applicationRef, {
-        'status': 'approved',
-        'matchId': matchRef.id,
-        'chatId': chatRef.id,
-        'approvedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      transaction.set(matchRef, matchData);
-      transaction.set(chatRef, chatData);
-    });
+    await _createMatchNotificationIfNeeded(matchNotification);
   }
+
+  Future<void> _createMatchNotificationIfNeeded(
+    _MatchNotificationPayload payload,
+  ) async {
+    if (payload.employeeId.trim().isEmpty ||
+        payload.employerId.trim().isEmpty ||
+        payload.applicationId.trim().isEmpty ||
+        payload.jobId.trim().isEmpty) {
+      debugPrint(
+        'ApplicationService.updateApplicationStatus match notification '
+        'skipped because required data missing '
+        'applicationId=${payload.applicationId} employeeId=${payload.employeeId} '
+        'employerId=${payload.employerId} jobId=${payload.jobId}',
+      );
+      return;
+    }
+
+    final existingNotification = await _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: payload.employeeId)
+        .where('type', isEqualTo: 'match_created')
+        .where('relatedApplicationId', isEqualTo: payload.applicationId)
+        .limit(1)
+        .get();
+
+    if (existingNotification.docs.isNotEmpty) {
+      debugPrint(
+        'ApplicationService.updateApplicationStatus match notification '
+        'skipped because duplicate notification already exists '
+        'applicationId=${payload.applicationId} '
+        'notificationId=${existingNotification.docs.first.id}',
+      );
+      return;
+    }
+
+    final body = _matchNotificationBody(employerName: payload.employerName);
+
+    try {
+      await _notificationService.createNotification(
+        userId: payload.employeeId,
+        senderId: payload.employerId,
+        type: 'match_created',
+        title: "🎉 It's a Match!",
+        body: body,
+        relatedApplicationId: payload.applicationId,
+        relatedJobId: payload.jobId,
+        relatedChatId: payload.chatId,
+        senderName: payload.employerName,
+        senderImageUrl: payload.employerImageUrl,
+      );
+      debugPrint(
+        'ApplicationService.updateApplicationStatus match notification '
+        'created applicationId=${payload.applicationId} '
+        'employeeId=${payload.employeeId} employerId=${payload.employerId}',
+      );
+    } catch (error) {
+      debugPrint(
+        'ApplicationService.updateApplicationStatus failed to create match '
+        'notification applicationId=${payload.applicationId}: $error',
+      );
+    }
+  }
+}
+
+class _MatchNotificationPayload {
+  const _MatchNotificationPayload({
+    required this.applicationId,
+    required this.jobId,
+    required this.chatId,
+    required this.employeeId,
+    required this.employerId,
+    required this.employerName,
+    required this.employerImageUrl,
+  });
+
+  final String applicationId;
+  final String jobId;
+  final String chatId;
+  final String employeeId;
+  final String employerId;
+  final String employerName;
+  final String employerImageUrl;
+}
+
+String _matchNotificationBody({required String employerName}) {
+  final cleanEmployerName = employerName.trim().isEmpty
+      ? 'A business'
+      : employerName.trim();
+  return '$cleanEmployerName approved your application';
 }
 
 class EmployerApplicationDetails {
