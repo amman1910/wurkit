@@ -213,6 +213,110 @@ exports.deleteEmployeeAccount = onCall(async (request) => {
   return { success: true };
 });
 
+exports.deleteEmployerAccount = onCall(async (request) => {
+  const auth = request.auth;
+  if (!auth || !auth.uid) {
+    throw new HttpsError(
+      "unauthenticated",
+      "You must be signed in to delete your account."
+    );
+  }
+
+  const uid = auth.uid;
+  const db = admin.firestore();
+  const authAdmin = admin.auth();
+  const storage = admin.storage();
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  const userRef = db.collection("users").doc(uid);
+  const profileRef = db.collection("employerProfiles").doc(uid);
+  const userDoc = await userRef.get();
+
+  if (!userDoc.exists) {
+    throw new HttpsError("not-found", "User account document not found.");
+  }
+
+  const userData = userDoc.data() || {};
+  if (userData.role !== "employer") {
+    throw new HttpsError(
+      "permission-denied",
+      "Only employer accounts can be deleted from this screen."
+    );
+  }
+
+  logger.info("Employer account deletion started", { uid });
+
+  const deletedBusiness = "Deleted business";
+  const jobUpdate = {
+    employerDeleted: true,
+    businessDeleted: true,
+    businessName: deletedBusiness,
+    businessLogoUrl: null,
+    status: "closed",
+    isActive: false,
+    isDeleted: true,
+    deletedAt: now,
+    updatedAt: now,
+  };
+  const businessSideUpdate = {
+    employerDeleted: true,
+    businessDeleted: true,
+    businessName: deletedBusiness,
+    businessLogoUrl: null,
+    deletedAt: now,
+    updatedAt: now,
+  };
+  const chatUpdate = {
+    employerDeleted: true,
+    businessDeleted: true,
+    businessName: deletedBusiness,
+    businessLogoUrl: null,
+    isActive: false,
+    deletedAt: now,
+    updatedAt: now,
+    participantNames: { [uid]: deletedBusiness },
+    participantImages: { [uid]: null },
+  };
+  const senderNotificationUpdate = {
+    senderDeleted: true,
+    senderName: deletedBusiness,
+    senderImageUrl: null,
+    updatedAt: now,
+  };
+
+  await Promise.all([
+    updateQueryBatch(db.collection("jobs").where("employerId", "==", uid), jobUpdate),
+    updateQueryBatch(
+      db.collection("applications").where("employerId", "==", uid),
+      businessSideUpdate
+    ),
+    updateQueryBatch(
+      db.collection("matches").where("employerId", "==", uid),
+      businessSideUpdate
+    ),
+    deleteQueryBatch(db.collection("notifications").where("userId", "==", uid)),
+    updateQueryBatch(
+      db.collection("notifications").where("senderId", "==", uid),
+      senderNotificationUpdate
+    ),
+  ]);
+
+  await anonymizeEmployerChats(db, uid, chatUpdate);
+
+  await Promise.all([userRef.delete(), profileRef.delete()]);
+
+  // TODO: Delete non-canonical logo paths if custom Storage paths are added.
+  await deleteStoragePathIfExists(
+    storage.bucket(),
+    `employer_profile_logos/${uid}/business_logo.jpg`
+  );
+
+  await authAdmin.deleteUser(uid);
+
+  logger.info("Employer account deletion completed", { uid });
+  return { success: true };
+});
+
 async function anonymizeEmployeeChats(db, uid, chatUpdate) {
   const chatRefs = new Map();
   const byEmployee = await db
@@ -238,6 +342,39 @@ async function anonymizeEmployeeChats(db, uid, chatUpdate) {
       {
         senderDeleted: true,
         senderName: "Deleted user",
+        senderPhotoUrl: null,
+        senderImageUrl: null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }
+    );
+  }
+}
+
+async function anonymizeEmployerChats(db, uid, chatUpdate) {
+  const chatRefs = new Map();
+  const byEmployer = await db
+    .collection("chats")
+    .where("employerId", "==", uid)
+    .get();
+  for (const doc of byEmployer.docs) {
+    chatRefs.set(doc.ref.path, doc.ref);
+  }
+
+  const byParticipant = await db
+    .collection("chats")
+    .where("participants", "array-contains", uid)
+    .get();
+  for (const doc of byParticipant.docs) {
+    chatRefs.set(doc.ref.path, doc.ref);
+  }
+
+  for (const chatRef of chatRefs.values()) {
+    await updateDocumentRefsBatch(db, [chatRef], chatUpdate);
+    await updateQueryBatch(
+      chatRef.collection("messages").where("senderId", "==", uid),
+      {
+        senderDeleted: true,
+        senderName: "Deleted business",
         senderPhotoUrl: null,
         senderImageUrl: null,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
