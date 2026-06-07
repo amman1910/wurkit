@@ -1,14 +1,29 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:geolocator/geolocator.dart';
+
+class EmployerAccountDeletionException implements Exception {
+  const EmployerAccountDeletionException(this.message, {this.code});
+
+  final String message;
+  final String? code;
+
+  bool get isPermissionDenied => code == 'permission-denied';
+  bool get isUnauthenticated => code == 'unauthenticated';
+
+  @override
+  String toString() => message;
+}
 
 class EmployerProfileService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   Future<void> saveBusinessInfo({
     required String businessName,
@@ -56,14 +71,11 @@ class EmployerProfileService {
 
     await employerDoc.set(employerData, SetOptions(merge: true));
 
-    await _firestore.collection('users').doc(uid).set(
-      {
-        'role': 'employer',
-        'onboardingStep': 'business_info',
-        'updatedAt': now,
-      },
-      SetOptions(merge: true),
-    );
+    await _firestore.collection('users').doc(uid).set({
+      'role': 'employer',
+      'onboardingStep': 'business_info',
+      'updatedAt': now,
+    }, SetOptions(merge: true));
   }
 
   Future<void> saveBusinessLocation({
@@ -93,17 +105,14 @@ class EmployerProfileService {
 
     // Add location coordinates if available
     if (latitude != null && longitude != null) {
-      updateData['location'] = {
-        'lat': latitude,
-        'lng': longitude,
-      };
+      updateData['location'] = {'lat': latitude, 'lng': longitude};
     }
 
     // Save to employerProfiles/{uid}
-    await _firestore.collection('employerProfiles').doc(uid).set(
-      updateData,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('employerProfiles')
+        .doc(uid)
+        .set(updateData, SetOptions(merge: true));
 
     // Update users/{uid}
     await _firestore.collection('users').doc(uid).set({
@@ -115,7 +124,9 @@ class EmployerProfileService {
   Future<LocationPermission> requestLocationPermission() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception('Location services are disabled. Please enable location services to continue.');
+      throw Exception(
+        'Location services are disabled. Please enable location services to continue.',
+      );
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
@@ -123,12 +134,16 @@ class EmployerProfileService {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw Exception('Location permission denied. Please grant location permission to continue.');
+        throw Exception(
+          'Location permission denied. Please grant location permission to continue.',
+        );
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      throw Exception('Location permission permanently denied. Please enable location permission in app settings.');
+      throw Exception(
+        'Location permission permanently denied. Please enable location permission in app settings.',
+      );
     }
 
     return permission;
@@ -175,10 +190,10 @@ class EmployerProfileService {
     };
 
     // Save to employerProfiles/{uid}
-    await _firestore.collection('employerProfiles').doc(uid).set(
-      updateData,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('employerProfiles')
+        .doc(uid)
+        .set(updateData, SetOptions(merge: true));
 
     // Update users/{uid}
     await _firestore.collection('users').doc(uid).set({
@@ -193,7 +208,10 @@ class EmployerProfileService {
       return null;
     }
 
-    final snapshot = await _firestore.collection('employerProfiles').doc(user.uid).get();
+    final snapshot = await _firestore
+        .collection('employerProfiles')
+        .doc(user.uid)
+        .get();
     if (!snapshot.exists) {
       return null;
     }
@@ -210,7 +228,9 @@ class EmployerProfileService {
     }
 
     final uid = user.uid;
-    return _firestore.collection('employerProfiles').doc(uid).snapshots().map((snapshot) {
+    return _firestore.collection('employerProfiles').doc(uid).snapshots().map((
+      snapshot,
+    ) {
       if (!snapshot.exists) {
         return null;
       }
@@ -221,22 +241,32 @@ class EmployerProfileService {
     });
   }
 
-  Future<String> uploadEmployerBusinessLogo({
-    required File imageFile,
-  }) async {
+  Future<void> updateCurrentEmployerProfile(Map<String, dynamic> data) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw Exception('No authenticated user found');
     }
 
-    final ref = _storage.ref().child('employer_profile_logos/${user.uid}/business_logo.jpg');
+    await _firestore.collection('employerProfiles').doc(user.uid).set({
+      ...data,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<String> uploadEmployerBusinessLogo({required File imageFile}) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('No authenticated user found');
+    }
+
+    final ref = _storage.ref().child(
+      'employer_profile_logos/${user.uid}/business_logo.jpg',
+    );
     final uploadTask = await ref.putFile(imageFile);
     return uploadTask.ref.getDownloadURL();
   }
 
-  Future<void> completeEmployerProfile({
-    String? publicBusinessNote,
-  }) async {
+  Future<void> completeEmployerProfile({String? publicBusinessNote}) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw Exception('No authenticated user found');
@@ -254,19 +284,34 @@ class EmployerProfileService {
       employerData['publicBusinessNote'] = trimmedNote;
     }
 
-    await _firestore.collection('employerProfiles').doc(uid).set(
-      employerData,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('employerProfiles')
+        .doc(uid)
+        .set(employerData, SetOptions(merge: true));
 
-    await _firestore.collection('users').doc(uid).set(
-      {
-        'role': 'employer',
-        'profileCompleted': true,
-        'onboardingStep': 'completed',
-        'updatedAt': now,
-      },
-      SetOptions(merge: true),
-    );
+    await _firestore.collection('users').doc(uid).set({
+      'role': 'employer',
+      'profileCompleted': true,
+      'onboardingStep': 'completed',
+      'updatedAt': now,
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> deleteEmployerAccount() async {
+    try {
+      final callable = _functions.httpsCallable('deleteEmployerAccount');
+      final result = await callable.call<Map<String, dynamic>>();
+      final data = result.data;
+      if (data['success'] != true) {
+        throw const EmployerAccountDeletionException(
+          'Could not delete account. Please try again.',
+        );
+      }
+    } on FirebaseFunctionsException catch (error) {
+      throw EmployerAccountDeletionException(
+        error.message ?? 'Could not delete account. Please try again.',
+        code: error.code,
+      );
+    }
   }
 }
