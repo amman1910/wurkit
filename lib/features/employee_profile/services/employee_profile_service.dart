@@ -1,13 +1,27 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:geolocator/geolocator.dart';
+
+class EmployeeAccountDeletionException implements Exception {
+  const EmployeeAccountDeletionException(this.message, {this.code});
+
+  final String message;
+  final String? code;
+
+  bool get isPermissionDenied => code == 'permission-denied';
+
+  @override
+  String toString() => message;
+}
 
 class EmployeeProfileService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   Future<void> saveBasicInfo({
     required String name,
@@ -39,10 +53,10 @@ class EmployeeProfileService {
     }
 
     // Save to employeeProfiles/{uid}
-    await _firestore.collection('employeeProfiles').doc(uid).set(
-      data,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('employeeProfiles')
+        .doc(uid)
+        .set(data, SetOptions(merge: true));
 
     // Update users/{uid}
     await _firestore.collection('users').doc(uid).set({
@@ -83,10 +97,10 @@ class EmployeeProfileService {
     }
 
     // Save to employeeProfiles/{uid}
-    await _firestore.collection('employeeProfiles').doc(uid).set(
-      updateData,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('employeeProfiles')
+        .doc(uid)
+        .set(updateData, SetOptions(merge: true));
 
     // Update users/{uid}
     await _firestore.collection('users').doc(uid).set({
@@ -100,7 +114,9 @@ class EmployeeProfileService {
     // Check if location services are enabled
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception('Location services are disabled. Please enable location services to continue.');
+      throw Exception(
+        'Location services are disabled. Please enable location services to continue.',
+      );
     }
 
     // Check current permission status
@@ -110,12 +126,16 @@ class EmployeeProfileService {
       // Request permission
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw Exception('Location permission denied. Please grant location permission to continue.');
+        throw Exception(
+          'Location permission denied. Please grant location permission to continue.',
+        );
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      throw Exception('Location permission permanently denied. Please enable location permission in app settings.');
+      throw Exception(
+        'Location permission permanently denied. Please enable location permission in app settings.',
+      );
     }
 
     return permission;
@@ -153,17 +173,14 @@ class EmployeeProfileService {
 
     // Add location coordinates if available
     if (latitude != null && longitude != null) {
-      updateData['location'] = {
-        'lat': latitude,
-        'lng': longitude,
-      };
+      updateData['location'] = {'lat': latitude, 'lng': longitude};
     }
 
     // Save to employeeProfiles/{uid}
-    await _firestore.collection('employeeProfiles').doc(uid).set(
-      updateData,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('employeeProfiles')
+        .doc(uid)
+        .set(updateData, SetOptions(merge: true));
 
     // Update users/{uid}
     await _firestore.collection('users').doc(uid).set({
@@ -178,7 +195,8 @@ class EmployeeProfileService {
       // Request permission
       final permission = await requestLocationPermission();
 
-      if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+      if (permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always) {
         // Permission granted, get current position
         final position = await getCurrentPosition();
 
@@ -242,17 +260,14 @@ class EmployeeProfileService {
 
     // Add location coordinates if available
     if (latitude != null && longitude != null) {
-      updateData['location'] = {
-        'lat': latitude,
-        'lng': longitude,
-      };
+      updateData['location'] = {'lat': latitude, 'lng': longitude};
     }
 
     // Save to employeeProfiles/{uid}
-    await _firestore.collection('employeeProfiles').doc(uid).set(
-      updateData,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('employeeProfiles')
+        .doc(uid)
+        .set(updateData, SetOptions(merge: true));
 
     // Update users/{uid}
     await _firestore.collection('users').doc(uid).set({
@@ -274,9 +289,7 @@ class EmployeeProfileService {
     final now = FieldValue.serverTimestamp();
 
     // Prepare update data for employeeProfiles
-    Map<String, dynamic> profileUpdateData = {
-      'updatedAt': now,
-    };
+    Map<String, dynamic> profileUpdateData = {'updatedAt': now};
 
     if (shortBio != null && shortBio.isNotEmpty) {
       profileUpdateData['shortBio'] = shortBio;
@@ -286,10 +299,10 @@ class EmployeeProfileService {
     profileUpdateData['pastExperiences'] = pastExperiences;
 
     // Save to employeeProfiles/{uid}
-    await _firestore.collection('employeeProfiles').doc(uid).set(
-      profileUpdateData,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('employeeProfiles')
+        .doc(uid)
+        .set(profileUpdateData, SetOptions(merge: true));
 
     // Update users/{uid} - mark onboarding as complete
     await _firestore.collection('users').doc(uid).set({
@@ -310,19 +323,17 @@ class EmployeeProfileService {
     }
 
     final uid = user.uid;
-    return _firestore
-        .collection('employeeProfiles')
-        .doc(uid)
-        .snapshots()
-        .map((snapshot) {
-          if (!snapshot.exists) {
-            return null;
-          }
-          final data = snapshot.data() ?? {};
-          // Ensure uid is included
-          data['uid'] = uid;
-          return data;
-        });
+    return _firestore.collection('employeeProfiles').doc(uid).snapshots().map((
+      snapshot,
+    ) {
+      if (!snapshot.exists) {
+        return null;
+      }
+      final data = snapshot.data() ?? {};
+      // Ensure uid is included
+      data['uid'] = uid;
+      return data;
+    });
   }
 
   /// Gets the current authenticated employee profile from Firestore.
@@ -349,19 +360,50 @@ class EmployeeProfileService {
     return data;
   }
 
-  /// Uploads a profile image to Firebase Storage and returns the download URL.
-  /// The image is stored at: employee_profile_images/{uid}/profile.jpg
-  /// If the image already exists at this path, it will be replaced.
-  Future<String> uploadEmployeeProfileImage({
-    required File imageFile,
-  }) async {
+  Future<void> updateCurrentEmployeeProfile(Map<String, dynamic> data) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw Exception('No authenticated user found');
     }
 
     final uid = user.uid;
-    final ref = _storage.ref().child('employee_profile_images/$uid/profile.jpg');
+    await _firestore.collection('employeeProfiles').doc(uid).set({
+      ...data,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> deleteEmployeeAccount() async {
+    try {
+      final callable = _functions.httpsCallable('deleteEmployeeAccount');
+      final result = await callable.call<Map<String, dynamic>>();
+      final data = result.data;
+      if (data['success'] != true) {
+        throw const EmployeeAccountDeletionException(
+          'Could not delete account. Please try again.',
+        );
+      }
+    } on FirebaseFunctionsException catch (error) {
+      throw EmployeeAccountDeletionException(
+        error.message ?? 'Could not delete account. Please try again.',
+        code: error.code,
+      );
+    }
+  }
+
+  /// Uploads a profile image to Firebase Storage and returns the download URL.
+  /// The image is stored at: employee_profile_images/{uid}/profile.jpg
+  /// If the image already exists at this path, it will be replaced.
+  Future<String> uploadEmployeeProfileImage({required File imageFile}) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('No authenticated user found');
+    }
+
+    final uid = user.uid;
+    final ref = _storage.ref().child(
+      'employee_profile_images/$uid/profile.jpg',
+    );
 
     // Upload the file
     final uploadTask = await ref.putFile(imageFile);
