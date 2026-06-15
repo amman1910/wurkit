@@ -7,6 +7,7 @@ import 'dart:ui';
 import '../../../core/theme/app_ui.dart';
 import '../../messages/screens/chat_detail_page.dart';
 import '../../messages/services/chat_service.dart';
+import '../../reviews/widgets/public_profile_reviews_section.dart';
 import '../widgets/job_discovery_action_buttons.dart';
 
 typedef DiscoveryJobAction = Future<bool> Function();
@@ -343,7 +344,10 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
                             ),
                           ),
                           const SizedBox(height: AppSpacing.section),
-                          _BusinessPreviewCard(employer: support.employer),
+                          _BusinessPreviewCard(
+                            employer: support.employer,
+                            employerUserId: job.employerId,
+                          ),
                           SizedBox(
                             height: widget.showDiscoveryActions ? 108 : 88,
                           ),
@@ -805,9 +809,13 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _BusinessPreviewCard extends StatelessWidget {
-  const _BusinessPreviewCard({required this.employer});
+  const _BusinessPreviewCard({
+    required this.employer,
+    required this.employerUserId,
+  });
 
   final _EmployerDetails? employer;
+  final String employerUserId;
 
   @override
   Widget build(BuildContext context) {
@@ -876,6 +884,8 @@ class _BusinessPreviewCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
+              PublicProfileReviewsSection(userId: employerUserId),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Text(
@@ -906,7 +916,10 @@ class _BusinessPreviewCard extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.72),
-      builder: (context) => _BusinessDetailsSheet(employer: employer),
+      builder: (context) => _BusinessDetailsSheet(
+        employer: employer,
+        employerUserId: employerUserId,
+      ),
     );
   }
 
@@ -921,9 +934,13 @@ class _BusinessPreviewCard extends StatelessWidget {
 }
 
 class _BusinessDetailsSheet extends StatelessWidget {
-  const _BusinessDetailsSheet({required this.employer});
+  const _BusinessDetailsSheet({
+    required this.employer,
+    required this.employerUserId,
+  });
 
   final _EmployerDetails? employer;
+  final String employerUserId;
 
   @override
   Widget build(BuildContext context) {
@@ -995,6 +1012,8 @@ class _BusinessDetailsSheet extends StatelessWidget {
                           employer?.businessDescription ??
                           'Business details will appear here soon.',
                     ),
+                    const SizedBox(height: 14),
+                    PublicProfileReviewsSection(userId: employerUserId),
                     if (employer?.businessAddress != null) ...[
                       const SizedBox(height: 14),
                       _SheetInfoBlock(

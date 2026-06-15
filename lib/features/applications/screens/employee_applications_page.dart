@@ -11,6 +11,8 @@ import '../models/employee_application_item.dart';
 import '../services/employee_application_service.dart';
 import '../widgets/application_status_badge.dart';
 import '../widgets/employee_application_card.dart';
+import '../../reviews/screens/add_review_screen.dart';
+import '../../reviews/services/review_service.dart';
 
 const Color _softWhite = Color(0xFFF3F4F6);
 const Color _softText = Color(0xFFCBD5E1);
@@ -31,6 +33,7 @@ class EmployeeApplicationsPage extends StatefulWidget {
 class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
   final EmployeeApplicationService _service = EmployeeApplicationService();
   final ChatService _chatService = ChatService();
+  final ReviewService _reviewService = ReviewService();
   final TextEditingController _searchController = TextEditingController();
   final Set<String> _busyApplicationIds = {};
 
@@ -309,6 +312,52 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
     }
   }
 
+  bool _canReviewEmployer(EmployeeApplicationItem item) {
+    return item.isApproved && item.jobExists;
+  }
+
+  Future<void> _openEmployerReview(EmployeeApplicationItem item) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      _showSnackBar('Please sign in again');
+      return;
+    }
+
+    final reviewed = await _reviewService.hasUserReviewedJob(
+      jobId: item.jobId,
+      reviewerId: currentUser.uid,
+      targetUserId: item.employerId,
+    );
+    if (!mounted || reviewed) {
+      if (mounted && reviewed) {
+        _showSnackBar('You already reviewed this employer for this job.');
+      }
+      return;
+    }
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddReviewScreen(
+          jobId: item.jobId,
+          jobTitle: item.jobTitle,
+          targetUserId: item.employerId,
+          targetUserName: item.businessName,
+          targetRole: 'employer',
+          reviewerRole: 'employee',
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (result == true) {
+      _showSnackBar('Review submitted.');
+    }
+  }
+
   void _showFeedback({
     required IconData icon,
     required String text,
@@ -439,6 +488,10 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
                                       )
                                   ? () => _resendApplication(item)
                                   : null,
+                              onReview:
+                                  _canReviewEmployer(item)
+                                      ? () => _openEmployerReview(item)
+                                      : null,
                             );
                           },
                         ),

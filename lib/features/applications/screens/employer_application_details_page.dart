@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
 import '../../messages/screens/chat_detail_page.dart';
+import '../../reviews/widgets/public_profile_reviews_section.dart';
 import '../services/application_service.dart';
 
 class EmployerApplicationDetailsPage extends StatefulWidget {
@@ -142,6 +143,8 @@ class _EmployerApplicationDetailsPageState
                       _CandidateHero(item: item),
                       const SizedBox(height: 20),
                       _SummaryCard(item: item),
+                      const SizedBox(height: 16),
+                      PublicProfileReviewsSection(userId: item.candidate.id),
                       const SizedBox(height: 16),
                       _TopSkillsCard(skills: item.candidate.skills),
                       const SizedBox(height: 16),

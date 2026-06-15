@@ -5,6 +5,7 @@ import '../../applications/screens/employee_applications_page.dart';
 import '../../employee_profile/screens/employee_profile_page.dart';
 import '../../jobs/screens/employee_jobs_page.dart';
 import '../../jobs/screens/job_details_page.dart';
+import '../../reviews/widgets/public_profile_reviews_section.dart';
 import '../services/employee_home_service.dart';
 
 class EmployeeHomePage extends StatefulWidget {
@@ -913,6 +914,10 @@ class _UrgentJobTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.label,
                           ),
+                          const SizedBox(height: 10),
+                          PublicProfileReviewsSection(
+                            userId: job.employerId,
+                          ),
                         ],
                       ),
                     ),
@@ -1026,6 +1031,8 @@ class _RecommendedJobCard extends StatelessWidget {
                         style: AppTextStyles.label,
                       ),
                     ],
+                    const SizedBox(height: 10),
+                    PublicProfileReviewsSection(userId: job.employerId),
                     const Spacer(),
                     Row(
                       children: [

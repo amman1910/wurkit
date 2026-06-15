@@ -12,6 +12,7 @@ class EmployeeApplicationCard extends StatelessWidget {
     required this.onCancel,
     required this.onMessage,
     required this.onResend,
+    this.onReview,
   });
 
   final EmployeeApplicationItem item;
@@ -19,6 +20,7 @@ class EmployeeApplicationCard extends StatelessWidget {
   final VoidCallback? onCancel;
   final VoidCallback? onMessage;
   final VoidCallback? onResend;
+  final VoidCallback? onReview;
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +134,7 @@ class EmployeeApplicationCard extends StatelessWidget {
                 onCancel: onCancel,
                 onMessage: onMessage,
                 onResend: onResend,
+                onReview: onReview,
               ),
             ],
           ),
@@ -246,6 +249,7 @@ class _ActionRow extends StatelessWidget {
     required this.onCancel,
     required this.onMessage,
     required this.onResend,
+    this.onReview,
   });
 
   final EmployeeApplicationItem item;
@@ -253,6 +257,7 @@ class _ActionRow extends StatelessWidget {
   final VoidCallback? onCancel;
   final VoidCallback? onMessage;
   final VoidCallback? onResend;
+  final VoidCallback? onReview;
 
   @override
   Widget build(BuildContext context) {
@@ -286,6 +291,17 @@ class _ActionRow extends StatelessWidget {
               onTap: onMessage,
             ),
           ),
+          if (onReview != null) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: _MiniActionButton(
+                icon: Icons.star_outline_rounded,
+                label: 'Write Review',
+                color: AppColors.coralAccent,
+                onTap: onReview,
+              ),
+            ),
+          ],
         ],
         if (item.isCancelled && item.jobExists && onResend != null) ...[
           const SizedBox(width: 8),

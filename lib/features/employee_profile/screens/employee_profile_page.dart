@@ -2,10 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/theme/app_ui.dart';
 import '../../auth/screens/welcome_page.dart';
 import '../../auth/services/auth_service.dart';
+import '../../reviews/screens/user_reviews_list.dart';
+import '../../reviews/widgets/user_rating_summary.dart';
 import '../services/employee_profile_service.dart';
 import 'employee_basic_info_page.dart';
 
@@ -53,6 +56,10 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
                     profile: profile,
                     isUploadingImage: _isUploadingImage,
                     onEditImage: _updateProfileImage,
+                  ),
+                  const SizedBox(height: 10),
+                  _ReviewsSection(
+                    userId: FirebaseAuth.instance.currentUser?.uid,
                   ),
                   const SizedBox(height: 10),
                   _ProfileCompletionCard(
@@ -768,6 +775,64 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.red.shade700 : AppColors.coralAccent,
+      ),
+    );
+  }
+}
+
+class _ReviewsSection extends StatelessWidget {
+  const _ReviewsSection({required this.userId});
+
+  final String? userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUserId = userId;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Ratings & Reviews',
+            style: TextStyle(
+              color: AppColors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          UserRatingSummary(userId: currentUserId),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UserReviewsList(userId: currentUserId),
+                  ),
+                );
+              },
+              style: AppButtonStyles.secondaryOutline(),
+              child: Text(
+                'View reviews',
+                style: AppTextStyles.buttonLabel(color: AppColors.white),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

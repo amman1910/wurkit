@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
 import '../../messages/screens/chat_detail_page.dart';
+import '../../reviews/screens/add_review_screen.dart';
+import '../../reviews/services/review_service.dart';
 import '../../notifications/services/notification_service.dart';
 import '../services/application_service.dart';
 import 'employer_application_details_page.dart';
@@ -29,6 +31,7 @@ class EmployerApplicationsPage extends StatefulWidget {
 class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
   final ApplicationService _applicationService = ApplicationService();
   final NotificationService _notificationService = NotificationService();
+  final ReviewService _reviewService = ReviewService();
   final TextEditingController _searchController = TextEditingController();
   final Set<String> _processingIds = {};
   _ApplicationFilter? _selectedFilter;
@@ -118,6 +121,62 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
       context,
       MaterialPageRoute(builder: (_) => ChatDetailPage(chatId: chatId)),
     );
+  }
+
+  bool _canReviewEmployee(EmployerApplicationItem item) {
+    return item.isApproved &&
+      item.candidate.id.isNotEmpty &&
+      item.job.id.isNotEmpty;
+  }
+
+  Future<void> _openEmployeeReview(EmployerApplicationItem item) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in again')),
+      );
+      return;
+    }
+
+    final reviewed = await _reviewService.hasUserReviewedJob(
+      jobId: item.job.id,
+      reviewerId: currentUser.uid,
+      targetUserId: item.candidate.id,
+    );
+    if (!mounted || reviewed) {
+      if (mounted && reviewed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You already reviewed this worker for this job.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddReviewScreen(
+          jobId: item.job.id,
+          jobTitle: item.job.title,
+          targetUserId: item.candidate.id,
+          targetUserName: item.candidate.name,
+          targetRole: 'employee',
+          reviewerRole: 'employer',
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (result == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Review submitted.')),
+      );
+    }
   }
 
   List<EmployerApplicationItem> _visibleItems(
@@ -255,6 +314,9 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
                           onApprove: () => _approve(item),
                           onReject: () => _reject(item),
                           onMessage: () => _openChat(item),
+                          onReview: _canReviewEmployee(item)
+                              ? () => _openEmployeeReview(item)
+                              : null,
                         );
                       },
                     ),
@@ -518,6 +580,7 @@ class _ApplicationCard extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     required this.onMessage,
+    this.onReview,
   });
 
   final EmployerApplicationItem item;
@@ -526,6 +589,7 @@ class _ApplicationCard extends StatelessWidget {
   final VoidCallback onApprove;
   final VoidCallback onReject;
   final VoidCallback onMessage;
+  final VoidCallback? onReview;
 
   @override
   Widget build(BuildContext context) {
@@ -647,6 +711,7 @@ class _ApplicationCard extends StatelessWidget {
                   onApprove: onApprove,
                   onReject: onReject,
                   onMessage: onMessage,
+                  onReview: onReview,
                 ),
               ),
             ],
@@ -665,6 +730,7 @@ class _ApplicationActions extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     required this.onMessage,
+    this.onReview,
   });
 
   final EmployerApplicationItem item;
@@ -673,6 +739,7 @@ class _ApplicationActions extends StatelessWidget {
   final VoidCallback onApprove;
   final VoidCallback onReject;
   final VoidCallback onMessage;
+  final VoidCallback? onReview;
 
   @override
   Widget build(BuildContext context) {
@@ -727,11 +794,21 @@ class _ApplicationActions extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          _RoundIconButton(
-            icon: Icons.more_horiz_rounded,
-            onTap: onView,
-            size: 42,
-          ),
+          if (onReview != null)
+            Expanded(
+              child: _OutlineActionButton(
+                icon: Icons.star_outline_rounded,
+                label: 'Write Review',
+                color: AppColors.coralAccent,
+                onTap: onReview,
+              ),
+            )
+          else
+            _RoundIconButton(
+              icon: Icons.more_horiz_rounded,
+              onTap: onView,
+              size: 42,
+            ),
         ],
       );
     }
