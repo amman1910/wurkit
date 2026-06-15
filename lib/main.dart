@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-// Import the welcome page
-import 'features/auth/screens/welcome_page.dart';
+import 'core/theme/app_branding.dart';
+import 'features/auth/screens/splash_page.dart';
 import 'features/notifications/services/push_notification_service.dart';
 
 void main() async {
@@ -32,18 +32,16 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       navigatorKey: PushNotificationService.navigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Wurkit',
+      title: AppBranding.appName,
       theme: ThemeData(
-        // Setting the theme to dark to match your splash design
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFA8072),
+          seedColor: AppBranding.primaryColor,
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
       ),
-      // Set the initial page to WelcomePage
-      home: const WelcomePage(),
+      home: const SplashPage(),
     );
   }
 }

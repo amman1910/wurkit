@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_branding.dart';
 import '../../../core/theme/app_ui.dart';
 
 import '../services/auth_service.dart';
@@ -185,8 +186,14 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    Image.asset(
+                      AppBranding.logoPath,
+                      height: 72,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 18),
                     Text(
-                      'Welcome back',
+                      'Welcome back to ${AppBranding.appName}',
                       textAlign: TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -286,7 +293,7 @@ class _LoginPageState extends State<LoginPage> {
 
               Center(
                 child: Image.asset(
-                  'assets/images/wurkit_logo.png',
+                  AppBranding.logoPath,
                   height: 60,
                   fit: BoxFit.contain,
                   opacity: const AlwaysStoppedAnimation(0.8),

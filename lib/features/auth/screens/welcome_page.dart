@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_branding.dart';
 import '../../../core/theme/app_ui.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
@@ -22,7 +23,7 @@ class WelcomePage extends StatelessWidget {
 
               // Logo
               Image.asset(
-                'assets/images/wurkit_logo.png',
+                AppBranding.logoPath,
                 height: 120,
                 fit: BoxFit.contain,
               ),
@@ -32,17 +33,20 @@ class WelcomePage extends StatelessWidget {
               // App Name
               SizedBox(
                 width: double.infinity,
-                height: 125,
-                child: Image.asset(
-                  'assets/images/wurkit_retro_header.png',
-                  fit: BoxFit.contain,
+                child: Text(
+                  AppBranding.appName,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.heading(
+                    color: Colors.white,
+                    fontSize: 42,
+                  ),
                 ),
               ),
 
               const SizedBox(height: 8),
 
               const Text(
-                'Your shortcut to flexible work',
+                AppBranding.slogan,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -133,7 +137,7 @@ class WelcomePage extends StatelessWidget {
 
               // Small logo bottom
               Image.asset(
-                'assets/images/wurkit_logo.png',
+                AppBranding.logoPath,
                 height: 40,
                 opacity: const AlwaysStoppedAnimation(0.8),
               ),

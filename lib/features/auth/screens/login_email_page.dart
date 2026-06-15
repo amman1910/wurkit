@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_branding.dart';
 import '../../../core/theme/app_ui.dart';
 
 import '../services/auth_service.dart';
@@ -213,8 +214,18 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
 
               const SizedBox(height: AppSpacing.field),
 
+              Center(
+                child: Image.asset(
+                  AppBranding.logoPath,
+                  height: 72,
+                  fit: BoxFit.contain,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
               Text(
-                'Sign in to your account',
+                'Sign in to your ${AppBranding.appName} account',
                 style: AppTextStyles.heading(
                   color: AppColors.coralAccent,
                   fontSize: 32,
@@ -300,7 +311,7 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
 
               Center(
                 child: Image.asset(
-                  'assets/images/wurkit_logo.png',
+                  AppBranding.logoPath,
                   height: 50,
                   fit: BoxFit.contain,
                   opacity: const AlwaysStoppedAnimation(0.8),
