@@ -915,9 +915,7 @@ class _UrgentJobTile extends StatelessWidget {
                             style: AppTextStyles.label,
                           ),
                           const SizedBox(height: 10),
-                          PublicProfileReviewsSection(
-                            userId: job.employerId,
-                          ),
+                          PublicProfileReviewsSection(userId: job.employerId),
                         ],
                       ),
                     ),

@@ -88,10 +88,7 @@ class _AddReviewScreenState extends State<AddReviewScreen> {
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red.shade600,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red.shade600),
     );
   }
 
@@ -143,13 +140,14 @@ class _AddReviewScreenState extends State<AddReviewScreen> {
                   textCapitalization: TextCapitalization.sentences,
                   style: AppTextStyles.input,
                   maxLength: 500,
-                  decoration: AppInputDecorations.authField(
-                    label: 'Comment',
-                    hint: 'Add a short review...',
-                  ).copyWith(
-                    alignLabelWithHint: true,
-                    counterStyle: AppTextStyles.label,
-                  ),
+                  decoration:
+                      AppInputDecorations.authField(
+                        label: 'Comment',
+                        hint: 'Add a short review...',
+                      ).copyWith(
+                        alignLabelWithHint: true,
+                        counterStyle: AppTextStyles.label,
+                      ),
                   validator: (value) {
                     final text = value?.trim() ?? '';
                     if (text.isEmpty) {
@@ -180,10 +178,7 @@ class _AddReviewScreenState extends State<AddReviewScreen> {
                               color: AppColors.navyBg,
                             ),
                           )
-                        : Text(
-                            'Submit',
-                            style: AppTextStyles.buttonLabel(),
-                          ),
+                        : Text('Submit', style: AppTextStyles.buttonLabel()),
                   ),
                 ),
               ],

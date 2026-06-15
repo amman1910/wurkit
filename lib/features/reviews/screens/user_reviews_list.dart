@@ -34,7 +34,10 @@ class UserReviewsList extends StatelessWidget {
             return _StateMessage(
               icon: Icons.error_outline_rounded,
               title: 'Could not load reviews',
-              message: snapshot.error.toString().replaceFirst('Exception: ', ''),
+              message: snapshot.error.toString().replaceFirst(
+                'Exception: ',
+                '',
+              ),
             );
           }
 

@@ -125,16 +125,16 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
 
   bool _canReviewEmployee(EmployerApplicationItem item) {
     return item.isApproved &&
-      item.candidate.id.isNotEmpty &&
-      item.job.id.isNotEmpty;
+        item.candidate.id.isNotEmpty &&
+        item.job.id.isNotEmpty;
   }
 
   Future<void> _openEmployeeReview(EmployerApplicationItem item) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in again')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please sign in again')));
       return;
     }
 
@@ -173,9 +173,9 @@ class _EmployerApplicationsPageState extends State<EmployerApplicationsPage> {
     }
 
     if (result == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Review submitted.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Review submitted.')));
     }
   }
 
@@ -361,9 +361,7 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                !hasJobTitle
-                    ? 'Applications'
-                    : 'Applicants for $cleanJobTitle',
+                !hasJobTitle ? 'Applications' : 'Applicants for $cleanJobTitle',
                 style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 30,

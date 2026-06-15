@@ -58,7 +58,8 @@ class UserRatingSummary extends StatelessWidget {
           );
         }
 
-        final average = reviews.fold<double>(0, (sum, review) => sum + review.rating) /
+        final average =
+            reviews.fold<double>(0, (sum, review) => sum + review.rating) /
             reviews.length;
         final ratingText = average.toStringAsFixed(1);
         final reviewCount = reviews.length;

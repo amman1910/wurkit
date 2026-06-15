@@ -4,11 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/review.dart';
 
 class ReviewService {
-  ReviewService({
-    FirebaseAuth? firebaseAuth,
-    FirebaseFirestore? firestore,
-  })  : _auth = firebaseAuth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+  ReviewService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
+    : _auth = firebaseAuth ?? FirebaseAuth.instance,
+      _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -58,8 +56,7 @@ class ReviewService {
         throw Exception('You already reviewed this person for this job.');
       }
 
-      final resolvedReviewerName =
-          reviewerName?.trim().isNotEmpty == true
+      final resolvedReviewerName = reviewerName?.trim().isNotEmpty == true
           ? reviewerName!.trim()
           : await _resolveReviewerName(
               reviewerId: trimmedReviewerId,
@@ -95,9 +92,8 @@ class ReviewService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map(
-          (snapshot) => snapshot.docs
-              .map(Review.fromFirestore)
-              .toList(growable: false),
+          (snapshot) =>
+              snapshot.docs.map(Review.fromFirestore).toList(growable: false),
         );
   }
 
@@ -135,13 +131,15 @@ class ReviewService {
     required String reviewerId,
     required String targetUserId,
   }) async {
-    final reviewRef = _firestore.collection('reviews').doc(
-      _reviewDocId(
-        jobId: jobId,
-        reviewerId: reviewerId,
-        targetUserId: targetUserId,
-      ),
-    );
+    final reviewRef = _firestore
+        .collection('reviews')
+        .doc(
+          _reviewDocId(
+            jobId: jobId,
+            reviewerId: reviewerId,
+            targetUserId: targetUserId,
+          ),
+        );
 
     final snapshot = await reviewRef.get();
     return snapshot.exists;

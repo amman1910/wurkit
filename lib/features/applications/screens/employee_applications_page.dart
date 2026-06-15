@@ -488,10 +488,9 @@ class _EmployeeApplicationsPageState extends State<EmployeeApplicationsPage> {
                                       )
                                   ? () => _resendApplication(item)
                                   : null,
-                              onReview:
-                                  _canReviewEmployer(item)
-                                      ? () => _openEmployerReview(item)
-                                      : null,
+                              onReview: _canReviewEmployer(item)
+                                  ? () => _openEmployerReview(item)
+                                  : null,
                             );
                           },
                         ),
