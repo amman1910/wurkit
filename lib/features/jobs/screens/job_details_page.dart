@@ -7,6 +7,7 @@ import 'dart:ui';
 import '../../../core/theme/app_ui.dart';
 import '../../messages/screens/chat_detail_page.dart';
 import '../../messages/services/chat_service.dart';
+import '../../reports/screens/submit_report_screen.dart';
 import '../../reviews/widgets/public_profile_reviews_section.dart';
 import '../widgets/job_discovery_action_buttons.dart';
 
@@ -179,6 +180,58 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
     }
   }
 
+  Future<void> _openReportUser(
+    _JobDetails job,
+    _EmployerDetails? employer,
+  ) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      _showSnackBar('Please log in to submit a report');
+      return;
+    }
+    if (job.employerId.trim().isEmpty) {
+      _showSnackBar('Employer details are not available');
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubmitReportScreen(
+          reportedUserId: job.employerId,
+          reportedUserName: employer?.businessName ?? 'Employer',
+          reportedUserRole: 'employer',
+          reportType: 'user',
+          jobId: job.id,
+          jobTitle: job.title,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openReportJob(
+    _JobDetails job,
+    _EmployerDetails? employer,
+  ) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      _showSnackBar('Please log in to submit a report');
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubmitReportScreen(
+          reportedUserId: job.employerId,
+          reportedUserName: employer?.businessName ?? 'Employer',
+          reportedUserRole: 'employer',
+          reportType: 'job',
+          jobId: job.id,
+          jobTitle: job.title,
+        ),
+      ),
+    );
+  }
+
   Future<void> _runDiscoveryAction(
     String action,
     DiscoveryJobAction? callback,
@@ -347,6 +400,10 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
                           _BusinessPreviewCard(
                             employer: support.employer,
                             employerUserId: job.employerId,
+                            onReportUser: () =>
+                                _openReportUser(job, support.employer),
+                            onReportJob: () =>
+                                _openReportJob(job, support.employer),
                           ),
                           SizedBox(
                             height: widget.showDiscoveryActions ? 108 : 88,
@@ -812,10 +869,14 @@ class _BusinessPreviewCard extends StatelessWidget {
   const _BusinessPreviewCard({
     required this.employer,
     required this.employerUserId,
+    required this.onReportUser,
+    required this.onReportJob,
   });
 
   final _EmployerDetails? employer;
   final String employerUserId;
+  final VoidCallback onReportUser;
+  final VoidCallback onReportJob;
 
   @override
   Widget build(BuildContext context) {
@@ -886,6 +947,25 @@ class _BusinessPreviewCard extends StatelessWidget {
               const SizedBox(height: 14),
               PublicProfileReviewsSection(userId: employerUserId),
               const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: onReportUser,
+                    style: AppButtonStyles.secondaryOutline(),
+                    icon: const Icon(Icons.flag_outlined),
+                    label: const Text('Report'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onReportJob,
+                    style: AppButtonStyles.secondaryOutline(),
+                    icon: const Icon(Icons.flag_outlined),
+                    label: const Text('Report job'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Text(
