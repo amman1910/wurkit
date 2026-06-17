@@ -20,9 +20,9 @@ class AuthService {
     FirebaseAuth? firebaseAuth,
     FirebaseFirestore? firestore,
     GoogleSignIn? googleSignIn,
-  })  : _auth = firebaseAuth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance,
-        _googleSignIn = googleSignIn ?? GoogleSignIn();
+  }) : _auth = firebaseAuth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _googleSignIn = googleSignIn ?? GoogleSignIn();
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -199,13 +199,10 @@ class AuthService {
       throw Exception('No authenticated user found');
     }
 
-    await _firestore.collection('users').doc(user.uid).set(
-      {
-        'role': role,
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await _firestore.collection('users').doc(user.uid).set({
+      'role': role,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   /// Get the current user's document
@@ -227,6 +224,21 @@ class AuthService {
     final doc = await _firestore.collection('users').doc(user.uid).get();
     final data = doc.data();
     return data?['role'] as String?;
+  }
+
+  Future<bool> getCurrentUserIsBlocked() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return false;
+    }
+
+    final doc = await _firestore.collection('users').doc(user.uid).get();
+    return doc.data()?['isBlocked'] == true;
+  }
+
+  Future<bool> isAdminUser() async {
+    final role = await getCurrentUserRole();
+    return role == 'admin';
   }
 
   /// Determine the next navigation state after login
@@ -256,7 +268,10 @@ class AuthService {
     }
 
     if (role == 'employee') {
-      final profileDoc = await _firestore.collection('employeeProfiles').doc(user.uid).get();
+      final profileDoc = await _firestore
+          .collection('employeeProfiles')
+          .doc(user.uid)
+          .get();
 
       if (!profileDoc.exists) {
         return PostLoginNavigationState.employeeBasicInfo;
