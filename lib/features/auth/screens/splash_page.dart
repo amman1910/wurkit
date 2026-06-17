@@ -20,9 +20,9 @@ class _SplashPageState extends State<SplashPage> {
         return;
       }
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const WelcomePage()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const WelcomePage()));
     });
   }
 
@@ -33,7 +33,9 @@ class _SplashPageState extends State<SplashPage> {
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.horizontal),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.horizontal,
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
