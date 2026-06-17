@@ -7,6 +7,7 @@ import 'login_email_page.dart';
 import 'choose_profile_page.dart';
 import '../../employee_home/screens/employee_main_navigation_page.dart';
 import '../../employer_home/screens/employer_main_navigation_page.dart';
+import '../../admin/screens/admin_dashboard_page.dart';
 import '../../employee_profile/screens/employee_basic_info_page.dart';
 import '../../employee_profile/screens/employee_work_preferences_page.dart';
 import '../../employee_profile/screens/employee_availability_location_page.dart';
@@ -36,19 +37,29 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _navigateAfterLogin(PostLoginNavigationState routeState) async {
     if (!mounted) return;
 
+    final isBlocked = await _authService.getCurrentUserIsBlocked();
+    if (isBlocked) {
+      await _authService.signOut();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your account has been blocked. Please contact support.',
+          ),
+        ),
+      );
+      return;
+    }
+
     if (routeState == PostLoginNavigationState.chooseRole) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => const ChooseProfilePage(),
-        ),
+        MaterialPageRoute(builder: (context) => const ChooseProfilePage()),
       );
     } else if (routeState == PostLoginNavigationState.employeeBasicInfo) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => const EmployeeBasicInfoPage(),
-        ),
+        MaterialPageRoute(builder: (context) => const EmployeeBasicInfoPage()),
       );
     } else if (routeState == PostLoginNavigationState.employeeWorkPreferences) {
       Navigator.push(
@@ -57,14 +68,16 @@ class _LoginPageState extends State<LoginPage> {
           builder: (context) => const EmployeeWorkPreferencesPage(),
         ),
       );
-    } else if (routeState == PostLoginNavigationState.employeeAvailabilityLocation) {
+    } else if (routeState ==
+        PostLoginNavigationState.employeeAvailabilityLocation) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => const EmployeeAvailabilityLocationPage(),
         ),
       );
-    } else if (routeState == PostLoginNavigationState.employeeExperienceSummary) {
+    } else if (routeState ==
+        PostLoginNavigationState.employeeExperienceSummary) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -78,14 +91,16 @@ class _LoginPageState extends State<LoginPage> {
           builder: (context) => const EmployerBusinessInfoPage(),
         ),
       );
-    } else if (routeState == PostLoginNavigationState.employerBusinessLocation) {
+    } else if (routeState ==
+        PostLoginNavigationState.employerBusinessLocation) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => const EmployerBusinessLocationPage(),
         ),
       );
-    } else if (routeState == PostLoginNavigationState.employerHiringPreferences) {
+    } else if (routeState ==
+        PostLoginNavigationState.employerHiringPreferences) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -113,6 +128,10 @@ class _LoginPageState extends State<LoginPage> {
 
             if (role == 'employer') {
               return const EmployerMainNavigationPage();
+            }
+
+            if (role == 'admin') {
+              return const AdminDashboardPage();
             }
 
             return const ChooseProfilePage();
