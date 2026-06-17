@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
 import '../../messages/screens/chat_detail_page.dart';
+import '../../reports/screens/submit_report_screen.dart';
 import '../../reviews/widgets/public_profile_reviews_section.dart';
 import '../services/application_service.dart';
 
@@ -96,6 +97,21 @@ class _EmployerApplicationDetailsPageState
     );
   }
 
+  Future<void> _openReportCandidate(EmployerApplicationItem item) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubmitReportScreen(
+          reportedUserId: item.candidate.id,
+          reportedUserName: item.candidate.name,
+          reportedUserRole: 'employee',
+          reportType: 'user',
+          jobId: item.job.id,
+          jobTitle: item.job.title,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<EmployerApplicationDetails>(
@@ -141,6 +157,16 @@ class _EmployerApplicationDetailsPageState
                       _TopBar(item: item, onMessage: () => _openChat(item)),
                       const SizedBox(height: 12),
                       _CandidateHero(item: item),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _openReportCandidate(item),
+                          style: AppButtonStyles.secondaryOutline(),
+                          icon: const Icon(Icons.flag_outlined),
+                          label: const Text('Report'),
+                        ),
+                      ),
                       const SizedBox(height: 20),
                       _SummaryCard(item: item),
                       const SizedBox(height: 16),
