@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import 'choose_profile_page.dart';
 import '../../employee_home/screens/employee_main_navigation_page.dart';
 import '../../employer_home/screens/employer_main_navigation_page.dart';
+import '../../admin/screens/admin_dashboard_page.dart';
 import '../../employee_profile/screens/employee_basic_info_page.dart';
 import '../../employee_profile/screens/employee_work_preferences_page.dart';
 import '../../employee_profile/screens/employee_availability_location_page.dart';
@@ -47,19 +48,29 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
   Future<void> _navigateAfterLogin(PostLoginNavigationState routeState) async {
     if (!mounted) return;
 
+    final isBlocked = await _authService.getCurrentUserIsBlocked();
+    if (isBlocked) {
+      await _authService.signOut();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your account has been blocked. Please contact support.',
+          ),
+        ),
+      );
+      return;
+    }
+
     if (routeState == PostLoginNavigationState.chooseRole) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => const ChooseProfilePage(),
-        ),
+        MaterialPageRoute(builder: (context) => const ChooseProfilePage()),
       );
     } else if (routeState == PostLoginNavigationState.employeeBasicInfo) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => const EmployeeBasicInfoPage(),
-        ),
+        MaterialPageRoute(builder: (context) => const EmployeeBasicInfoPage()),
       );
     } else if (routeState == PostLoginNavigationState.employeeWorkPreferences) {
       Navigator.push(
@@ -68,14 +79,16 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
           builder: (context) => const EmployeeWorkPreferencesPage(),
         ),
       );
-    } else if (routeState == PostLoginNavigationState.employeeAvailabilityLocation) {
+    } else if (routeState ==
+        PostLoginNavigationState.employeeAvailabilityLocation) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => const EmployeeAvailabilityLocationPage(),
         ),
       );
-    } else if (routeState == PostLoginNavigationState.employeeExperienceSummary) {
+    } else if (routeState ==
+        PostLoginNavigationState.employeeExperienceSummary) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -89,14 +102,16 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
           builder: (context) => const EmployerBusinessInfoPage(),
         ),
       );
-    } else if (routeState == PostLoginNavigationState.employerBusinessLocation) {
+    } else if (routeState ==
+        PostLoginNavigationState.employerBusinessLocation) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => const EmployerBusinessLocationPage(),
         ),
       );
-    } else if (routeState == PostLoginNavigationState.employerHiringPreferences) {
+    } else if (routeState ==
+        PostLoginNavigationState.employerHiringPreferences) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -124,6 +139,10 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
 
             if (role == 'employer') {
               return const EmployerMainNavigationPage();
+            }
+
+            if (role == 'admin') {
+              return const AdminDashboardPage();
             }
 
             return const ChooseProfilePage();
@@ -159,10 +178,7 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signInWithEmail(
-        email: email,
-        password: password,
-      );
+      await _authService.signInWithEmail(email: email, password: password);
 
       if (!mounted) return;
 
@@ -206,10 +222,7 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
               TextButton(
                 onPressed: _isLoading ? null : () => Navigator.pop(context),
                 style: AppButtonStyles.text(),
-                child: const Text(
-                  'Back',
-                  style: AppTextStyles.textButton,
-                ),
+                child: const Text('Back', style: AppTextStyles.textButton),
               ),
 
               const SizedBox(height: AppSpacing.field),
@@ -268,11 +281,15 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
                   hint: '••••••••',
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                       color: Colors.white54,
                     ),
                     onPressed: !_isLoading
-                        ? () => setState(() => _obscurePassword = !_obscurePassword)
+                        ? () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          )
                         : null,
                   ),
                 ),
@@ -302,7 +319,9 @@ class _LoginEmailPageState extends State<LoginEmailPage> {
                         )
                       : Text(
                           'Sign In',
-                          style: AppTextStyles.buttonLabel(color: AppColors.navyBg),
+                          style: AppTextStyles.buttonLabel(
+                            color: AppColors.navyBg,
+                          ),
                         ),
                 ),
               ),
