@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_ui.dart';
 import '../../jobs/screens/job_details_page.dart';
+import '../../reports/screens/submit_report_screen.dart';
 import '../services/chat_service.dart';
 
 class ChatDetailPage extends StatefulWidget {
@@ -18,6 +19,7 @@ class ChatDetailPage extends StatefulWidget {
 
 class _ChatDetailPageState extends State<ChatDetailPage> {
   final ChatService _chatService = ChatService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _canSend = false;
@@ -91,6 +93,87 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     });
   }
 
+  String _readText(dynamic value, {String fallback = ''}) {
+    if (value is String) {
+      final trimmed = value.trim();
+      return trimmed.isEmpty ? fallback : trimmed;
+    }
+    if (value is num || value is bool) {
+      return value.toString();
+    }
+    return fallback;
+  }
+
+  Future<void> _openReportFromChat(Map<String, dynamic> chat) async {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null || currentUserId.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to submit a report.')),
+      );
+      return;
+    }
+
+    final employeeId = _readText(chat['employeeId']);
+    final employerId = _readText(chat['employerId']);
+    final participantNames = chat['participantNames'] is Map
+        ? Map<String, dynamic>.from(chat['participantNames'] as Map)
+        : <String, dynamic>{};
+
+    late final String targetUserId;
+    late final String targetRole;
+
+    if (currentUserId == employeeId && employerId.isNotEmpty) {
+      targetUserId = employerId;
+      targetRole = 'employer';
+    } else if (currentUserId == employerId && employeeId.isNotEmpty) {
+      targetUserId = employeeId;
+      targetRole = 'employee';
+    } else {
+      final participants = chat['participants'] is Iterable
+          ? (chat['participants'] as Iterable).whereType<String>().toList()
+          : <String>[];
+      final other = participants.firstWhere(
+        (id) => id != currentUserId,
+        orElse: () => '',
+      );
+      if (other.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to identify who to report.')),
+        );
+        return;
+      }
+      targetUserId = other;
+      targetRole = currentUserId == employerId ? 'employee' : 'employer';
+    }
+
+    if (targetUserId == currentUserId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot report yourself.')),
+      );
+      return;
+    }
+
+    final targetName = _readText(
+      participantNames[targetUserId],
+      fallback: _chatService.getOtherParticipantName(chat),
+    );
+    final jobId = _readText(chat['jobId']);
+    final jobTitle = _readText(chat['jobTitle']);
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubmitReportScreen(
+          reportedUserId: targetUserId,
+          reportedUserName: targetName,
+          reportedUserRole: targetRole,
+          reportType: 'chat',
+          jobId: jobId.isEmpty ? null : jobId,
+          jobTitle: jobTitle.isEmpty ? null : jobTitle,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,7 +207,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
             return Column(
               children: [
-                _ChatHeader(chat: chat, chatService: _chatService),
+                _ChatHeader(
+                  chat: chat,
+                  chatService: _chatService,
+                  onReport: () => _openReportFromChat(chat),
+                ),
                 Expanded(
                   child: StreamBuilder<List<Map<String, dynamic>>>(
                     stream: _chatService.watchMessages(widget.chatId),
@@ -199,10 +286,15 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 }
 
 class _ChatHeader extends StatelessWidget {
-  const _ChatHeader({required this.chat, required this.chatService});
+  const _ChatHeader({
+    required this.chat,
+    required this.chatService,
+    required this.onReport,
+  });
 
   final Map<String, dynamic> chat;
   final ChatService chatService;
+  final VoidCallback onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -276,11 +368,12 @@ class _ChatHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.lightText,
-                size: 24,
+              const SizedBox(width: 6),
+              OutlinedButton.icon(
+                onPressed: onReport,
+                style: AppButtonStyles.secondaryOutline(),
+                icon: const Icon(Icons.flag_outlined, size: 18),
+                label: const Text('Report'),
               ),
             ],
           ),
