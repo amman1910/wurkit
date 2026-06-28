@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 
 import '../../../core/theme/app_ui.dart';
+import '../../../shared/utils/distance_utils.dart';
+import '../../../shared/utils/address_format_utils.dart';
 import '../../messages/screens/chat_detail_page.dart';
 import '../../messages/services/chat_service.dart';
 import '../../reports/screens/submit_report_screen.dart';
@@ -67,11 +69,45 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
               });
 
     final applicationFuture = _loadCurrentApplication();
+    final employeeLocationFuture = _loadEmployeeLocation();
+
+    final employeeLocation = await employeeLocationFuture;
+    final employer = await employerFuture;
+    final destinationLat =
+        job.latitude ?? (job.usesBusinessAddress ? employer?.latitude : null);
+    final destinationLng =
+        job.longitude ?? (job.usesBusinessAddress ? employer?.longitude : null);
+    final distanceKm =
+        employeeLocation == null ||
+            destinationLat == null ||
+            destinationLng == null
+        ? null
+        : calculateDistanceKm(
+            lat1: employeeLocation.$1,
+            lng1: employeeLocation.$2,
+            lat2: destinationLat,
+            lng2: destinationLng,
+          );
 
     return _SupportData(
-      employer: await employerFuture,
+      employer: employer,
       application: await applicationFuture,
+      distanceKm: distanceKm,
     );
+  }
+
+  Future<(double, double)?> _loadEmployeeLocation() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    final snapshot = await _firestore
+        .collection('employeeProfiles')
+        .doc(user.uid)
+        .get();
+    final location = snapshot.data()?['location'];
+    if (location is! Map) return null;
+    final lat = _readDouble(location['lat']);
+    final lng = _readDouble(location['lng']);
+    return lat == null || lng == null ? null : (lat, lng);
   }
 
   Future<_ApplicationDetails?> _loadCurrentApplication() async {
@@ -386,7 +422,11 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
                       ),
                       sliver: SliverList(
                         delegate: SliverChildListDelegate([
-                          _InfoChipGrid(job: job, employer: support.employer),
+                          _InfoChipGrid(
+                            job: job,
+                            employer: support.employer,
+                            distanceKm: support.distanceKm,
+                          ),
                           const SizedBox(height: AppSpacing.section),
                           _SectionCard(
                             title: 'About this job',
@@ -537,7 +577,7 @@ class _JobHero extends StatelessWidget {
 
   String get _heroSubtitle {
     final businessName = employer?.businessName ?? 'Wurkit employer';
-    final place = employer?.city ?? job.location;
+    final place = job.location ?? employer?.businessAddress;
     return place == null ? businessName : '$businessName - $place';
   }
 }
@@ -662,14 +702,19 @@ class _UrgentHeroBadge extends StatelessWidget {
 }
 
 class _InfoChipGrid extends StatelessWidget {
-  const _InfoChipGrid({required this.job, required this.employer});
+  const _InfoChipGrid({
+    required this.job,
+    required this.employer,
+    this.distanceKm,
+  });
 
   final _JobDetails job;
   final _EmployerDetails? employer;
+  final double? distanceKm;
 
   @override
   Widget build(BuildContext context) {
-    final location = employer?.city ?? job.location;
+    final location = job.location ?? employer?.businessAddress;
     final shift = job.shiftText;
 
     return Container(
@@ -718,7 +763,9 @@ class _InfoChipGrid extends StatelessWidget {
           _InfoTile(
             icon: Icons.place_outlined,
             label: 'Location',
-            value: location ?? 'Shared soon',
+            value: distanceKm == null
+                ? location ?? 'Shared soon'
+                : '${location ?? 'Job location'} · ${distanceKm!.toStringAsFixed(1)} km away',
           ),
         ],
       ),
@@ -1006,7 +1053,6 @@ class _BusinessPreviewCard extends StatelessWidget {
   String _businessSubtitle(_EmployerDetails? employer) {
     final parts = [
       employer?.businessType,
-      employer?.city,
     ].whereType<String>().where((value) => value.isNotEmpty).toList();
 
     return parts.isEmpty ? 'Local business' : parts.join(' - ');
@@ -1102,14 +1148,6 @@ class _BusinessDetailsSheet extends StatelessWidget {
                         body: employer!.businessAddress!,
                       ),
                     ],
-                    if (employer?.city != null) ...[
-                      const SizedBox(height: 14),
-                      _SheetInfoBlock(
-                        icon: Icons.location_city_outlined,
-                        title: 'City',
-                        body: employer!.city!,
-                      ),
-                    ],
                     const SizedBox(height: 26),
                     SizedBox(
                       height: AppSpacing.buttonHeight,
@@ -1137,7 +1175,6 @@ class _BusinessDetailsSheet extends StatelessWidget {
   String _businessSubtitle(_EmployerDetails? employer) {
     final parts = [
       employer?.businessType,
-      employer?.city,
     ].whereType<String>().where((value) => value.isNotEmpty).toList();
 
     return parts.isEmpty ? 'Local business' : parts.join(' - ');
@@ -1247,7 +1284,6 @@ class LegacyBusinessPreviewCard extends StatelessWidget {
   String _businessSubtitle(_EmployerDetails? employer) {
     final parts = [
       employer?.businessType,
-      employer?.city,
     ].whereType<String>().where((value) => value.isNotEmpty).toList();
 
     return parts.isEmpty ? 'Local business' : parts.join(' · ');
@@ -1657,6 +1693,9 @@ class _JobDetails {
     this.shiftEnd,
     this.shifts = const [],
     this.imageUrl,
+    this.latitude,
+    this.longitude,
+    this.locationType,
   });
 
   final String id;
@@ -1676,6 +1715,12 @@ class _JobDetails {
   final String? shiftEnd;
   final List<String> shifts;
   final String? imageUrl;
+  final double? latitude;
+  final double? longitude;
+  final String? locationType;
+
+  bool get usesBusinessAddress =>
+      locationType == 'business_address' || location == null;
 
   String? get salaryText {
     if (salary == null) {
@@ -1723,6 +1768,11 @@ class _JobDetails {
     DocumentSnapshot<Map<String, dynamic>> snapshot,
   ) {
     final data = snapshot.data() ?? {};
+    final coordinates = data['jobLocation'] is Map
+        ? data['jobLocation'] as Map
+        : data['location'] is Map
+        ? data['location'] as Map
+        : const {};
     return _JobDetails(
       id: snapshot.id,
       employerId: _readString(data['employerId']) ?? '',
@@ -1730,7 +1780,9 @@ class _JobDetails {
       status: _readString(data['status']) ?? 'open',
       urgent: _readBool(data['urgent']) ?? false,
       description: _readString(data['description']),
-      location: _readLocation(data['location']),
+      location:
+          _formatNullableAddress(data['jobAddress']) ??
+          _readLocation(data['location']),
       date: _readJobDate(data),
       salary: _readDouble(data['salaryAmount']) ?? _readDouble(data['salary']),
       salaryType: _readString(data['salaryType']),
@@ -1741,6 +1793,11 @@ class _JobDetails {
       shiftEnd: _readString(data['shiftEnd']),
       shifts: _readShifts(data['shifts']),
       imageUrl: _readFirstString(data['imageUrls']),
+      latitude: _readDouble(coordinates['lat']),
+      longitude: _readDouble(coordinates['lng']),
+      locationType: data['location'] is Map
+          ? _readString((data['location'] as Map)['type'])
+          : null,
     );
   }
 }
@@ -1752,7 +1809,8 @@ class _EmployerDetails {
     this.businessDescription,
     this.businessLogoUrl,
     this.businessAddress,
-    this.city,
+    this.latitude,
+    this.longitude,
   });
 
   final String? businessName;
@@ -1760,16 +1818,23 @@ class _EmployerDetails {
   final String? businessDescription;
   final String? businessLogoUrl;
   final String? businessAddress;
-  final String? city;
+  final double? latitude;
+  final double? longitude;
 
   factory _EmployerDetails.fromMap(Map<String, dynamic> data) {
+    final location = data['businessLocation'] is Map
+        ? data['businessLocation'] as Map
+        : data['location'] is Map
+        ? data['location'] as Map
+        : const {};
     return _EmployerDetails(
       businessName: _readString(data['businessName']),
       businessType: _readString(data['businessType']),
       businessDescription: _readString(data['businessDescription']),
       businessLogoUrl: _readString(data['businessLogoUrl']),
-      businessAddress: _readString(data['businessAddress']),
-      city: _readString(data['city']),
+      businessAddress: _formatNullableAddress(data['businessAddress']),
+      latitude: _readDouble(location['lat']),
+      longitude: _readDouble(location['lng']),
     );
   }
 }
@@ -1787,10 +1852,11 @@ class _ApplicationDetails {
 }
 
 class _SupportData {
-  const _SupportData({this.employer, this.application});
+  const _SupportData({this.employer, this.application, this.distanceKm});
 
   final _EmployerDetails? employer;
   final _ApplicationDetails? application;
+  final double? distanceKm;
 }
 
 class _CtaState {
@@ -1851,16 +1917,16 @@ String? _readLocation(Object? value) {
     if (value['type'] == 'remote') {
       return 'Remote';
     }
-    final parts = [
-      _readString(value['address']),
-      _readString(value['city']),
-    ].whereType<String>().toList();
-    if (parts.isNotEmpty) {
-      return parts.join(', ');
-    }
+    final address = _readString(value['address']);
+    if (address != null) return formatAddressForDisplay(address);
   }
 
   return null;
+}
+
+String? _formatNullableAddress(Object? value) {
+  final address = _readString(value);
+  return address == null ? null : formatAddressForDisplay(address);
 }
 
 List<String> _readStringList(Object? value) {

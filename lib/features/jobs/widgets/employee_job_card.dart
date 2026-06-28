@@ -11,6 +11,7 @@ class EmployeeJobCard extends StatelessWidget {
     required this.onViewDetails,
     required this.onToggleSaved,
     required this.actionButtons,
+    this.distanceKm,
   });
 
   final EmployeeJobDiscoveryItem job;
@@ -18,6 +19,7 @@ class EmployeeJobCard extends StatelessWidget {
   final VoidCallback onViewDetails;
   final VoidCallback onToggleSaved;
   final Widget actionButtons;
+  final double? distanceKm;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +71,7 @@ class EmployeeJobCard extends StatelessWidget {
                             final veryCompact = bodyConstraints.maxHeight < 285;
                             final body = _CardBody(
                               job: job,
+                              distanceKm: distanceKm,
                               compact: compactBody,
                               veryCompact: veryCompact,
                               fillHeight: !compactBody,
@@ -109,6 +112,7 @@ class _CardBody extends StatelessWidget {
     required this.fillHeight,
     required this.onViewDetails,
     required this.actionButtons,
+    this.distanceKm,
   });
 
   final EmployeeJobDiscoveryItem job;
@@ -117,6 +121,7 @@ class _CardBody extends StatelessWidget {
   final bool fillHeight;
   final VoidCallback onViewDetails;
   final Widget actionButtons;
+  final double? distanceKm;
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +165,16 @@ class _CardBody extends StatelessWidget {
         ),
         SizedBox(height: compact ? 7 : 10),
         _InfoGrid(job: job, compact: true),
+        if (distanceKm != null) ...[
+          SizedBox(height: compact ? 4 : 6),
+          Text(
+            '${distanceKm!.toStringAsFixed(1)} km away',
+            style: const TextStyle(
+              color: AppColors.coralAccent,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
         SizedBox(height: compact ? 7 : 10),
         _SkillWrap(skills: job.requiredSkills, compact: true),
         if (fillHeight) const Spacer(),

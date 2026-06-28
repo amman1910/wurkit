@@ -79,10 +79,11 @@ class EmployerProfileService {
   }
 
   Future<void> saveBusinessLocation({
-    required String businessAddress,
-    required String city,
+    String? businessAddress,
     required bool isPhysicalBusiness,
     required bool locationPermissionGranted,
+    String? placeId,
+    String? country,
     double? latitude,
     double? longitude,
   }) async {
@@ -96,16 +97,37 @@ class EmployerProfileService {
 
     // Prepare location data
     Map<String, dynamic> updateData = {
-      'businessAddress': businessAddress,
-      'city': city,
       'isPhysicalBusiness': isPhysicalBusiness,
       'locationPermissionGranted': locationPermissionGranted,
       'updatedAt': now,
     };
 
-    // Add location coordinates if available
-    if (latitude != null && longitude != null) {
+    if (isPhysicalBusiness &&
+        businessAddress != null &&
+        placeId != null &&
+        latitude != null &&
+        longitude != null) {
+      updateData['businessAddress'] = businessAddress;
+      updateData['businessPlaceId'] = placeId;
       updateData['location'] = {'lat': latitude, 'lng': longitude};
+      updateData['businessLocation'] = {'lat': latitude, 'lng': longitude};
+      updateData['businessCountry'] = country ?? FieldValue.delete();
+    } else if (!isPhysicalBusiness) {
+      for (final field in [
+        'businessAddress',
+        'businessPlaceId',
+        'businessLocation',
+        'businessCountry',
+        'location',
+        'city',
+        'businessCity',
+      ]) {
+        updateData[field] = FieldValue.delete();
+      }
+    }
+    if (isPhysicalBusiness) {
+      updateData['city'] = FieldValue.delete();
+      updateData['businessCity'] = FieldValue.delete();
     }
 
     // Save to employerProfiles/{uid}

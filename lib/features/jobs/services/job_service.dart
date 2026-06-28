@@ -116,6 +116,10 @@ class JobService {
       'urgent',
       'shifts',
       'location',
+      'jobAddress',
+      'jobPlaceId',
+      'jobLocation',
+      'jobCountry',
       'imageUrls',
     };
 

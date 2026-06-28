@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../../shared/utils/distance_utils.dart';
 import '../models/employee_job_discovery_item.dart';
 import '../services/employee_job_discovery_service.dart';
 import '../widgets/employee_job_card.dart';
@@ -27,6 +28,7 @@ class _JobFilters {
     this.shiftFilter = _ShiftFilter.any,
     this.customShiftStart,
     this.customShiftEnd,
+    this.radiusKm = 0,
   });
 
   final RangeValues salaryRange;
@@ -36,12 +38,14 @@ class _JobFilters {
   final _ShiftFilter shiftFilter;
   final TimeOfDay? customShiftStart;
   final TimeOfDay? customShiftEnd;
+  final int radiusKm;
 
   bool get hasSalaryFilter => salaryRange.start > 20 || salaryRange.end < 100;
   bool get hasDateFilter => dateFilter != _DateFilter.any;
   bool get hasShiftFilter => shiftFilter != _ShiftFilter.any;
+  bool get hasRadiusFilter => radiusKm > 0;
   bool get hasActiveFilters =>
-      hasSalaryFilter || hasDateFilter || hasShiftFilter;
+      hasSalaryFilter || hasDateFilter || hasShiftFilter || hasRadiusFilter;
 
   _JobFilters copyWith({
     RangeValues? salaryRange,
@@ -53,6 +57,7 @@ class _JobFilters {
     TimeOfDay? customShiftStart,
     TimeOfDay? customShiftEnd,
     bool clearCustomShift = false,
+    int? radiusKm,
   }) {
     return _JobFilters(
       salaryRange: salaryRange ?? this.salaryRange,
@@ -66,6 +71,7 @@ class _JobFilters {
       customShiftEnd: clearCustomShift
           ? null
           : customShiftEnd ?? this.customShiftEnd,
+      radiusKm: radiusKm ?? this.radiusKm,
     );
   }
 }
@@ -86,6 +92,7 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage>
 
   List<EmployeeJobDiscoveryItem> _jobs = [];
   Set<String> _savedJobIds = {};
+  ({double latitude, double longitude})? _employeeLocation;
   _JobFilters _filters = const _JobFilters();
   bool _isLoading = true;
   String? _error;
@@ -136,6 +143,7 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage>
       final results = await Future.wait([
         _service.loadJobs(),
         _service.loadSavedJobIds(),
+        _service.loadEmployeeLocation(),
       ]);
       if (!mounted) {
         return;
@@ -143,6 +151,8 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage>
       setState(() {
         _jobs = results[0] as List<EmployeeJobDiscoveryItem>;
         _savedJobIds = results[1] as Set<String>;
+        _employeeLocation =
+            results[2] as ({double latitude, double longitude})?;
         _cardVersion++;
       });
     } catch (error) {
@@ -494,7 +504,10 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage>
       if (!matchesText) {
         return false;
       }
-      return _matchesSalary(job) && _matchesDate(job) && _matchesShift(job);
+      return _matchesSalary(job) &&
+          _matchesDate(job) &&
+          _matchesShift(job) &&
+          _matchesRadius(job);
     }).toList();
   }
 
@@ -508,6 +521,25 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage>
     }
     return amount >= _filters.salaryRange.start &&
         (_filters.salaryRange.end >= 100 || amount <= _filters.salaryRange.end);
+  }
+
+  double? _distanceTo(EmployeeJobDiscoveryItem job) {
+    final employee = _employeeLocation;
+    final lat = job.latitude;
+    final lng = job.longitude;
+    if (employee == null || lat == null || lng == null) return null;
+    return calculateDistanceKm(
+      lat1: employee.latitude,
+      lng1: employee.longitude,
+      lat2: lat,
+      lng2: lng,
+    );
+  }
+
+  bool _matchesRadius(EmployeeJobDiscoveryItem job) {
+    if (!_filters.hasRadiusFilter) return true;
+    final distance = _distanceTo(job);
+    return distance != null && distance <= _filters.radiusKm;
   }
 
   bool _matchesDate(EmployeeJobDiscoveryItem job) {
@@ -730,6 +762,7 @@ class _EmployeeJobsPageState extends State<EmployeeJobsPage>
                 child: EmployeeJobCard(
                   key: ValueKey('${currentJob.id}-$_cardVersion'),
                   job: currentJob,
+                  distanceKm: _distanceTo(currentJob),
                   isSaved: _savedJobIds.contains(currentJob.id),
                   onViewDetails: () => _openDetails(currentJob),
                   onToggleSaved: () => _toggleSaved(currentJob),
@@ -1358,6 +1391,20 @@ class _JobFilterSheetState extends State<_JobFilterSheet> {
                 ],
               ),
               const SizedBox(height: 8),
+              const _SheetSectionTitle('Distance'),
+              _ChipWrap<int>(
+                items: const [
+                  (0, 'Any distance'),
+                  (5, '5 km'),
+                  (10, '10 km'),
+                  (25, '25 km'),
+                  (50, '50 km'),
+                ],
+                selected: _draft.radiusKm,
+                onSelected: (value) =>
+                    setState(() => _draft = _draft.copyWith(radiusKm: value)),
+              ),
+              const SizedBox(height: 18),
               _SheetLabel(
                 title: 'Salary range',
                 value: _draft.hasSalaryFilter

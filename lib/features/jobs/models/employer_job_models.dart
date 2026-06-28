@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../shared/utils/address_format_utils.dart';
+
 class EmployerJob {
   const EmployerJob({
     required this.id,
@@ -112,7 +114,9 @@ class EmployerJob {
           _readDouble(data['salaryAmount']) ?? _readDouble(data['salary']),
       salaryType: _readString(data['salaryType']),
       dateText: _readJobDate(data),
-      locationText: _readLocation(data['location']),
+      locationText:
+          _formatNullableAddress(data['jobAddress']) ??
+          _readLocation(data['location']),
       shiftText: _readShiftText(data),
       imageUrl: _readFirstString(data['imageUrls']),
     );
@@ -178,14 +182,16 @@ String? _readLocation(Object? value) {
 
   if (value is Map) {
     if (value['type'] == 'remote') return 'Remote';
-    final parts = [
-      _readString(value['address']),
-      _readString(value['city']),
-    ].whereType<String>().toList();
-    if (parts.isNotEmpty) return parts.join(', ');
+    final address = _readString(value['address']);
+    if (address != null) return formatAddressForDisplay(address);
   }
 
   return null;
+}
+
+String? _formatNullableAddress(Object? value) {
+  final address = _readString(value);
+  return address == null ? null : formatAddressForDisplay(address);
 }
 
 List<String> _readStringList(Object? value) {

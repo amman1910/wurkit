@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../../shared/utils/address_format_utils.dart';
 
 class JobCard extends StatelessWidget {
   const JobCard({super.key, required this.job});
@@ -12,7 +13,7 @@ class JobCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = job['title'] as String? ?? '';
     final description = job['description'] as String? ?? '';
-    final location = _readLocation(job['location']);
+    final location = _readLocation(job['jobAddress'] ?? job['location']);
     final date = _readDateText(job);
     final skills = _readSkills(job);
     final shiftText = _readShiftText(job);
@@ -223,11 +224,9 @@ String _readLocation(Object? value) {
   if (value is Map) {
     if (value['type'] == 'remote') return 'Remote';
     final address = value['address'] as String?;
-    final city = value['city'] as String?;
-    return [
-      address,
-      city,
-    ].whereType<String>().where((part) => part.trim().isNotEmpty).join(', ');
+    return address == null || address.trim().isEmpty
+        ? 'Location TBD'
+        : formatAddressForDisplay(address);
   }
   return 'Location TBD';
 }

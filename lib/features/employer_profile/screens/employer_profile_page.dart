@@ -1,11 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../../shared/models/resolved_address.dart';
+import '../../../shared/utils/address_format_utils.dart';
+import '../../../shared/widgets/address_autocomplete_field.dart';
 import '../../auth/screens/welcome_page.dart';
 import '../../auth/services/auth_service.dart';
 import '../../reviews/screens/user_reviews_list.dart';
@@ -217,14 +220,8 @@ class _EmployerProfilePageState extends State<EmployerProfilePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _EditLocationSheet(
-        profile: profile,
-        onSave: _saveProfileUpdates,
-        onDetectLocation: () async {
-          await _service.requestLocationPermission();
-          return _service.getCurrentPosition();
-        },
-      ),
+      builder: (context) =>
+          _EditLocationSheet(profile: profile, onSave: _saveProfileUpdates),
     );
     if (!mounted) return;
     if (result == true) {
@@ -895,10 +892,6 @@ class _LocationCard extends StatelessWidget {
             value: _readString(profile, 'businessAddress', 'Not added yet'),
           ),
           _InfoTile(
-            label: 'City',
-            value: _readString(profile, 'city', 'Not added yet'),
-          ),
-          _InfoTile(
             label: 'Physical business',
             value: _readBool(profile, 'isPhysicalBusiness') ? 'Yes' : 'No',
           ),
@@ -1438,15 +1431,10 @@ class _EditBusinessInfoSheetState extends State<_EditBusinessInfoSheet> {
 }
 
 class _EditLocationSheet extends StatefulWidget {
-  const _EditLocationSheet({
-    required this.profile,
-    required this.onSave,
-    required this.onDetectLocation,
-  });
+  const _EditLocationSheet({required this.profile, required this.onSave});
 
   final Map<String, dynamic> profile;
   final Future<void> Function(Map<String, dynamic> data) onSave;
-  final Future<Position> Function() onDetectLocation;
 
   @override
   State<_EditLocationSheet> createState() => _EditLocationSheetState();
@@ -1454,13 +1442,9 @@ class _EditLocationSheet extends StatefulWidget {
 
 class _EditLocationSheetState extends State<_EditLocationSheet> {
   late final TextEditingController _addressController;
-  late final TextEditingController _cityController;
   late bool _isPhysicalBusiness;
-  late bool _locationPermissionGranted;
-  double? _latitude;
-  double? _longitude;
+  ResolvedAddress? _resolvedAddress;
   bool _isSaving = false;
-  bool _isDetectingLocation = false;
 
   @override
   void initState() {
@@ -1468,56 +1452,57 @@ class _EditLocationSheetState extends State<_EditLocationSheet> {
     _addressController = TextEditingController(
       text: _readString(widget.profile, 'businessAddress'),
     );
-    _cityController = TextEditingController(
-      text: _readString(widget.profile, 'city'),
-    );
     _isPhysicalBusiness = _readBool(widget.profile, 'isPhysicalBusiness');
-    _locationPermissionGranted = _readBool(
-      widget.profile,
-      'locationPermissionGranted',
-    );
-    final location = _readMap(widget.profile, 'location');
-    _latitude = _readNullableDouble(location, 'lat');
-    _longitude = _readNullableDouble(location, 'lng');
+    final location = _readMap(widget.profile, 'businessLocation').isNotEmpty
+        ? _readMap(widget.profile, 'businessLocation')
+        : _readMap(widget.profile, 'location');
+    final latitude = _readNullableDouble(location, 'lat');
+    final longitude = _readNullableDouble(location, 'lng');
+    final placeId = _readString(widget.profile, 'businessPlaceId');
+    if (latitude != null && longitude != null && placeId.isNotEmpty) {
+      _resolvedAddress = ResolvedAddress(
+        formattedAddress: _addressController.text,
+        placeId: placeId,
+        latitude: latitude,
+        longitude: longitude,
+        country: _readString(widget.profile, 'businessCountry'),
+      );
+    }
   }
 
   @override
   void dispose() {
     _addressController.dispose();
-    _cityController.dispose();
     super.dispose();
   }
 
-  Future<void> _detectLocation() async {
-    setState(() => _isDetectingLocation = true);
-    try {
-      final position = await widget.onDetectLocation();
-      if (!mounted) return;
-      setState(() {
-        _locationPermissionGranted = true;
-        _latitude = position.latitude;
-        _longitude = position.longitude;
-        _isDetectingLocation = false;
-      });
-      _showSheetSnackBar('Location detected.', isError: false);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _locationPermissionGranted = false;
-        _isDetectingLocation = false;
-      });
-      _showSheetSnackBar('Could not detect location.');
-    }
-  }
-
   Future<void> _handleSave() async {
+    if (_isPhysicalBusiness && _resolvedAddress == null) {
+      _showSheetSnackBar('Please select a valid address from the list.');
+      return;
+    }
+    final resolved = _resolvedAddress;
     final update = <String, dynamic>{
-      'businessAddress': _addressController.text.trim(),
-      'city': _cityController.text.trim(),
       'isPhysicalBusiness': _isPhysicalBusiness,
-      'locationPermissionGranted': _locationPermissionGranted,
-      if (_latitude != null && _longitude != null)
-        'location': {'lat': _latitude, 'lng': _longitude},
+      'locationPermissionGranted': false,
+      'city': FieldValue.delete(),
+      'businessCity': FieldValue.delete(),
+      if (_isPhysicalBusiness && resolved != null) ...{
+        'businessAddress': formatAddressForDisplay(resolved.formattedAddress),
+        'businessPlaceId': resolved.placeId,
+        'businessLocation': {
+          'lat': resolved.latitude,
+          'lng': resolved.longitude,
+        },
+        'location': {'lat': resolved.latitude, 'lng': resolved.longitude},
+        if (resolved.country != null) 'businessCountry': resolved.country,
+      } else ...{
+        'businessAddress': FieldValue.delete(),
+        'businessPlaceId': FieldValue.delete(),
+        'businessLocation': FieldValue.delete(),
+        'businessCountry': FieldValue.delete(),
+        'location': FieldValue.delete(),
+      },
     };
 
     setState(() => _isSaving = true);
@@ -1555,41 +1540,20 @@ class _EditLocationSheetState extends State<_EditLocationSheet> {
       child: _SheetContent(
         onSave: _handleSave,
         children: [
-          _SheetTextField(
-            controller: _addressController,
-            label: 'Business address',
-          ),
-          _SheetTextField(controller: _cityController, label: 'City'),
+          if (_isPhysicalBusiness) ...[
+            AddressAutocompleteField(
+              controller: _addressController,
+              initialAddress: _resolvedAddress,
+              decoration: const InputDecoration(labelText: 'Business address'),
+              onAddressChanged: (address) =>
+                  setState(() => _resolvedAddress = address),
+            ),
+            const SizedBox(height: 12),
+          ],
           _SwitchRow(
             title: 'Physical business',
             value: _isPhysicalBusiness,
             onChanged: (value) => setState(() => _isPhysicalBusiness = value),
-          ),
-          OutlinedButton.icon(
-            onPressed: _isDetectingLocation ? null : _detectLocation,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.coralAccent,
-              side: BorderSide(color: AppColors.coralAccent.withOpacity(0.55)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            ),
-            icon: _isDetectingLocation
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.coralAccent,
-                    ),
-                  )
-                : const Icon(Icons.my_location_rounded),
-            label: Text(
-              _latitude != null && _longitude != null
-                  ? 'Location detected'
-                  : 'Detect location',
-            ),
           ),
           const SizedBox(height: 12),
         ],
@@ -2283,9 +2247,9 @@ List<String> _missingProfileElements(Map<String, dynamic> profile) {
   if (_readString(profile, 'businessEmail').isEmpty) {
     missing.add('Add business email');
   }
-  if (_readString(profile, 'businessAddress').isEmpty ||
-      _readString(profile, 'city').isEmpty ||
-      _readMap(profile, 'location').isEmpty) {
+  if (_readBool(profile, 'isPhysicalBusiness') &&
+      (_readString(profile, 'businessAddress').isEmpty ||
+          _readMap(profile, 'businessLocation').isEmpty)) {
     missing.add('Enable location');
   }
   if (_readStringList(profile, 'hiringCategories').length < 2) {
@@ -2311,7 +2275,6 @@ int _calculateCompletion(Map<String, dynamic> profile) {
     'businessDescription',
     'businessLogoUrl',
     'businessAddress',
-    'city',
     'location',
     'hiringCategories',
     'requiredSkills',

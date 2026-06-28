@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../shared/utils/address_format_utils.dart';
+
 class EmployeeJobDiscoveryItem {
   const EmployeeJobDiscoveryItem({
     required this.id,
@@ -16,6 +18,8 @@ class EmployeeJobDiscoveryItem {
     required this.urgent,
     required this.shifts,
     required this.location,
+    required this.latitude,
+    required this.longitude,
     required this.imageUrl,
     required this.visibility,
     required this.status,
@@ -39,6 +43,8 @@ class EmployeeJobDiscoveryItem {
   final bool urgent;
   final List<String> shifts;
   final String? location;
+  final double? latitude;
+  final double? longitude;
   final String? imageUrl;
   final String? visibility;
   final String status;
@@ -54,7 +60,6 @@ class EmployeeJobDiscoveryItem {
   String? get businessSubtitle {
     final parts = [
       employer.businessType,
-      employer.city,
     ].whereType<String>().where((part) => part.isNotEmpty).toList();
     return parts.isEmpty ? null : parts.join(' • ');
   }
@@ -126,10 +131,7 @@ class EmployeeJobDiscoveryItem {
   }
 
   String get locationText {
-    return location ??
-        employer.city ??
-        employer.businessAddress ??
-        'Location TBD';
+    return location ?? employer.businessAddress ?? 'Location TBD';
   }
 
   String get searchText {
@@ -179,6 +181,22 @@ class EmployeeJobDiscoveryItem {
       if (legacySkill != null && !skills.contains(legacySkill)) legacySkill,
     ];
 
+    final locationMap = data['jobLocation'] is Map
+        ? data['jobLocation'] as Map
+        : data['location'] is Map
+        ? data['location'] as Map
+        : const {};
+    final legacyLocation = data['location'];
+    final locationType = legacyLocation is Map
+        ? _readString(legacyLocation['type'])
+        : null;
+    final jobLatitude = _readDouble(locationMap['lat']);
+    final jobLongitude = _readDouble(locationMap['lng']);
+    final hasJobAddress =
+        _readString(data['jobAddress']) != null ||
+        _readLocation(data['location']) != null;
+    final useBusinessCoordinates =
+        locationType == 'business_address' || !hasJobAddress;
     return EmployeeJobDiscoveryItem(
       id: id,
       employerId: _readString(data['employerId']) ?? '',
@@ -194,7 +212,13 @@ class EmployeeJobDiscoveryItem {
       endDate: _readDateTime(data['endDate']),
       urgent: _readBool(data['urgent']) ?? false,
       shifts: _readShifts(data),
-      location: _readLocation(data['location']),
+      location:
+          _formatNullableAddress(data['jobAddress']) ??
+          _readLocation(data['location']),
+      latitude:
+          jobLatitude ?? (useBusinessCoordinates ? employer.latitude : null),
+      longitude:
+          jobLongitude ?? (useBusinessCoordinates ? employer.longitude : null),
       imageUrl: _readFirstString(data['imageUrls']),
       visibility: _readString(data['visibility']),
       status: _readString(data['status']) ?? 'open',
@@ -231,6 +255,8 @@ class EmployeeDiscoveryEmployer {
     this.city,
     this.businessType,
     this.businessAddress,
+    this.latitude,
+    this.longitude,
   });
 
   final String? businessName;
@@ -238,14 +264,23 @@ class EmployeeDiscoveryEmployer {
   final String? city;
   final String? businessType;
   final String? businessAddress;
+  final double? latitude;
+  final double? longitude;
 
   factory EmployeeDiscoveryEmployer.fromMap(Map<String, dynamic>? data) {
+    final location = data?['businessLocation'] is Map
+        ? data!['businessLocation'] as Map
+        : data?['location'] is Map
+        ? data!['location'] as Map
+        : const {};
     return EmployeeDiscoveryEmployer(
       businessName: _readString(data?['businessName']),
       businessLogoUrl: _readString(data?['businessLogoUrl']),
       city: _readString(data?['city']),
       businessType: _readString(data?['businessType']),
       businessAddress: _readString(data?['businessAddress']),
+      latitude: _readDouble(location['lat']),
+      longitude: _readDouble(location['lng']),
     );
   }
 }
@@ -339,15 +374,15 @@ String? _readLocation(Object? value) {
     if (_readString(value['type']) == 'remote') {
       return 'Remote';
     }
-    final parts = [
-      _readString(value['address']),
-      _readString(value['city']),
-    ].whereType<String>().toList();
-    if (parts.isNotEmpty) {
-      return parts.join(', ');
-    }
+    final address = _readString(value['address']);
+    if (address != null) return formatAddressForDisplay(address);
   }
   return null;
+}
+
+String? _formatNullableAddress(Object? value) {
+  final address = _readString(value);
+  return address == null ? null : formatAddressForDisplay(address);
 }
 
 List<String> _readShifts(Map<String, dynamic> data) {

@@ -11,7 +11,8 @@ class EmployerProfileSummaryPage extends StatefulWidget {
   const EmployerProfileSummaryPage({super.key, this.isEditing = false});
 
   @override
-  State<EmployerProfileSummaryPage> createState() => _EmployerProfileSummaryPageState();
+  State<EmployerProfileSummaryPage> createState() =>
+      _EmployerProfileSummaryPageState();
 }
 
 class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
@@ -50,10 +51,7 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
     ];
 
     return Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: intervals[index],
-      ),
+      CurvedAnimation(parent: _animationController, curve: intervals[index]),
     );
   }
 
@@ -71,7 +69,10 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
 
       setState(() {
         _profileData = profile;
-        _publicNoteController.text = _readStringFromData(profile, 'publicBusinessNote');
+        _publicNoteController.text = _readStringFromData(
+          profile,
+          'publicBusinessNote',
+        );
         _isLoadingProfile = false;
       });
 
@@ -115,9 +116,7 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
       } else {
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(
-            builder: (_) => const EmployerMainNavigationPage(),
-          ),
+          MaterialPageRoute(builder: (_) => const EmployerMainNavigationPage()),
           (route) => false,
         );
       }
@@ -125,7 +124,9 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to complete business profile: ${e.toString()}'),
+            content: Text(
+              'Failed to complete business profile: ${e.toString()}',
+            ),
             backgroundColor: Colors.red.shade600,
           ),
         );
@@ -211,11 +212,7 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
         color: AppColors.coralAccent.withOpacity(0.14),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Icon(
-        icon,
-        color: AppColors.coralAccent,
-        size: 20,
-      ),
+      child: Icon(icon, color: AppColors.coralAccent, size: 20),
     );
   }
 
@@ -306,7 +303,9 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
         padding: const EdgeInsets.only(top: 48),
         child: Center(
           child: CircularProgressIndicator(
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.coralAccent),
+            valueColor: const AlwaysStoppedAnimation<Color>(
+              AppColors.coralAccent,
+            ),
             strokeWidth: 3,
           ),
         ),
@@ -365,7 +364,10 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
                 _buildInfoRow('Business type', _readString('businessType')),
                 _buildInfoRow('Business phone', _readString('businessPhone')),
                 _buildInfoRow('Business email', _readString('businessEmail')),
-                _buildInfoRow('Business description', _readString('businessDescription')),
+                _buildInfoRow(
+                  'Business description',
+                  _readString('businessDescription'),
+                ),
               ],
             ),
           ),
@@ -400,9 +402,14 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
                   ],
                 ),
                 const SizedBox(height: 16),
-                _buildInfoRow('Business address', _readString('businessAddress')),
-                _buildInfoRow('City', _readString('city')),
-                _buildInfoRow('Physical business', _formatYesNo(_readBool('isPhysicalBusiness'))),
+                _buildInfoRow(
+                  'Business address',
+                  _readString('businessAddress'),
+                ),
+                _buildInfoRow(
+                  'Physical business',
+                  _formatYesNo(_readBool('isPhysicalBusiness')),
+                ),
                 _buildInfoRow(
                   'Location permission granted',
                   _formatYesNo(_readBool('locationPermissionGranted')),
@@ -441,15 +448,30 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
                   ],
                 ),
                 const SizedBox(height: 16),
-                _buildLabeledChipGroup('Hiring categories', _readStringList('hiringCategories')),
-                _buildLabeledChipGroup('Required skills', _readStringList('requiredSkills')),
-                _buildLabeledChipGroup('Typical shift types', _readStringList('typicalShiftTypes')),
-                _buildInfoRow('Urgent hiring enabled', _formatYesNo(_readBool('urgentHiringEnabled'))),
+                _buildLabeledChipGroup(
+                  'Hiring categories',
+                  _readStringList('hiringCategories'),
+                ),
+                _buildLabeledChipGroup(
+                  'Required skills',
+                  _readStringList('requiredSkills'),
+                ),
+                _buildLabeledChipGroup(
+                  'Typical shift types',
+                  _readStringList('typicalShiftTypes'),
+                ),
+                _buildInfoRow(
+                  'Urgent hiring enabled',
+                  _formatYesNo(_readBool('urgentHiringEnabled')),
+                ),
                 _buildInfoRow(
                   'Short-notice workers',
                   _formatYesNo(_readBool('usuallyNeedsShortNoticeWorkers')),
                 ),
-                _buildInfoRow('Default hourly rate range', _formatHourlyRateRange()),
+                _buildInfoRow(
+                  'Default hourly rate range',
+                  _formatHourlyRateRange(),
+                ),
                 _buildInfoRow(
                   'Preferred experience level',
                   _readString('preferredExperienceLevel'),
@@ -468,7 +490,8 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
             style: AppTextStyles.input,
             decoration: AppInputDecorations.authField(
               label: 'Public business note',
-              hint: 'Add a short note workers will see on your business profile...',
+              hint:
+                  'Add a short note workers will see on your business profile...',
             ),
           ),
         ),
@@ -483,11 +506,15 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
               style: AppButtonStyles.primary(
                 backgroundColor: AppColors.coralAccent,
                 foregroundColor: AppColors.navyBg,
-                disabledBackgroundColor: AppColors.coralAccent.withOpacity(0.35),
+                disabledBackgroundColor: AppColors.coralAccent.withOpacity(
+                  0.35,
+                ),
               ),
               child: _isFinishing
                   ? const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.navyBg),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.navyBg,
+                      ),
                     )
                   : Text(
                       widget.isEditing ? 'Save changes' : 'Finish',
@@ -516,10 +543,7 @@ class _EmployerProfileSummaryPageState extends State<EmployerProfileSummaryPage>
               const SizedBox(height: 32),
               _buildAnimatedItem(
                 0,
-                Image.asset(
-                  'assets/images/wurkit_logo.png',
-                  height: 92,
-                ),
+                Image.asset('assets/images/wurkit_logo.png', height: 92),
               ),
               const SizedBox(height: 18),
               _buildAnimatedItem(

@@ -7,7 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_ui.dart';
-import '../../../shared/data/israel_cities.dart';
+import '../../../shared/models/resolved_address.dart';
+import '../../../shared/utils/address_format_utils.dart';
+import '../../../shared/widgets/address_autocomplete_field.dart';
 import '../services/job_service.dart';
 
 class PostJobScreen extends StatefulWidget {
@@ -34,8 +36,8 @@ class _PostJobScreenState extends State<PostJobScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _customCategoryController = TextEditingController();
-  final _cityController = TextEditingController();
   final _addressController = TextEditingController();
+  ResolvedAddress? _customResolvedAddress;
 
   String? _jobCategory;
   String _salaryType = 'Hourly';
@@ -239,7 +241,6 @@ class _PostJobScreenState extends State<PostJobScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _customCategoryController.dispose();
-    _cityController.dispose();
     _addressController.dispose();
     super.dispose();
   }
@@ -252,9 +253,9 @@ class _PostJobScreenState extends State<PostJobScreen> {
       setState(() {
         _employerProfile = profile;
         if (profile != null) {
-          _cityController.text = _readString(profile['city']) ?? '';
           _addressController.text =
               _readString(profile['businessAddress']) ?? '';
+          _customResolvedAddress = _resolvedAddressFromProfile(profile);
           _applyProfileSalaryDefault(profile);
 
           final profileCategories = _profileCategories(profile);
@@ -326,8 +327,24 @@ class _PostJobScreenState extends State<PostJobScreen> {
         locationType == 'custom_address') {
       _locationType = locationType!;
     }
-    _cityController.text = _readString(location['city']) ?? '';
     _addressController.text = _readString(location['address']) ?? '';
+    final lat = _readDouble(location['lat']);
+    final lng = _readDouble(location['lng']);
+    final placeId =
+        _readString(data['jobPlaceId']) ?? _readString(location['placeId']);
+    if (_locationType == 'custom_address' &&
+        lat != null &&
+        lng != null &&
+        placeId != null) {
+      _customResolvedAddress = ResolvedAddress(
+        formattedAddress: _addressController.text,
+        placeId: placeId,
+        latitude: lat,
+        longitude: lng,
+        country:
+            _readString(data['jobCountry']) ?? _readString(location['country']),
+      );
+    }
 
     final parsedShifts = _readShiftDrafts(data['shifts']);
     _shifts
@@ -526,6 +543,11 @@ class _PostJobScreenState extends State<PostJobScreen> {
   }
 
   Future<void> _saveJob({required bool publish}) async {
+    final locationError = _locationValidationError();
+    if (locationError != null) {
+      _showSnack(locationError, isError: true);
+      return;
+    }
     setState(() => _isLoading = true);
 
     try {
@@ -584,6 +606,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
         )
         .toList();
 
+    final resolvedLocation = _locationData();
     return {
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
@@ -597,7 +620,18 @@ class _PostJobScreenState extends State<PostJobScreen> {
       'endDate': endDate == null ? null : Timestamp.fromDate(endDate),
       'urgent': _isUrgent,
       'shifts': shifts,
-      'location': _locationData(),
+      'location': {
+        'type': resolvedLocation['type'],
+        'address': resolvedLocation['address'],
+        'lat': resolvedLocation['lat'],
+        'lng': resolvedLocation['lng'],
+      },
+      'jobAddress': resolvedLocation['address'],
+      'jobPlaceId': resolvedLocation['placeId'],
+      'jobLocation': resolvedLocation['lat'] == null
+          ? null
+          : {'lat': resolvedLocation['lat'], 'lng': resolvedLocation['lng']},
+      'jobCountry': resolvedLocation['country'],
       'imageUrls': imageUrls,
     };
   }
@@ -605,7 +639,9 @@ class _PostJobScreenState extends State<PostJobScreen> {
   bool _hasMeaningfulDuplicateChange() {
     final original = _originalMeaningfulSignature;
     if (original == null) return true;
-    return _meaningfulJobSignature(_buildJobData(imageUrls: _existingImageUrls)) !=
+    return _meaningfulJobSignature(
+          _buildJobData(imageUrls: _existingImageUrls),
+        ) !=
         original;
   }
 
@@ -613,34 +649,41 @@ class _PostJobScreenState extends State<PostJobScreen> {
     if (_locationType == 'remote') {
       return {
         'type': 'remote',
-        'city': null,
         'address': null,
         'lat': null,
         'lng': null,
+        'placeId': null,
+        'country': null,
       };
     }
 
     if (_locationType == 'business_address') {
-      final location = _readMap(_employerProfile?['location']);
+      final location = _readMap(
+        _employerProfile?['businessLocation'] ?? _employerProfile?['location'],
+      );
       return {
         'type': 'business_address',
-        'city':
-            _readString(_employerProfile?['city']) ??
-            _cityController.text.trim(),
-        'address':
-            _readString(_employerProfile?['businessAddress']) ??
-            _addressController.text.trim(),
+        'address': formatAddressForDisplay(
+          _readString(_employerProfile?['businessAddress']) ??
+              _addressController.text.trim(),
+        ),
         'lat': _readDouble(location['lat']),
         'lng': _readDouble(location['lng']),
+        'placeId': _readString(_employerProfile?['businessPlaceId']),
+        'country': _readString(_employerProfile?['businessCountry']),
       };
     }
 
+    final selected = _customResolvedAddress;
     return {
       'type': 'custom_address',
-      'city': _cityController.text.trim(),
-      'address': _addressController.text.trim(),
-      'lat': null,
-      'lng': null,
+      'address': formatAddressForDisplay(
+        selected?.formattedAddress ?? _addressController.text.trim(),
+      ),
+      'lat': selected?.latitude,
+      'lng': selected?.longitude,
+      'placeId': selected?.placeId,
+      'country': selected?.country,
     };
   }
 
@@ -681,20 +724,29 @@ class _PostJobScreenState extends State<PostJobScreen> {
     if (_validShifts().isEmpty) {
       return 'Add at least one valid shift with an end time after the start time.';
     }
+    final locationError = _locationValidationError();
+    if (locationError != null) return locationError;
+    return null;
+  }
+
+  String? _locationValidationError() {
     if (_locationType == 'business_address') {
-      final city =
-          _readString(_employerProfile?['city']) ?? _cityController.text.trim();
       final address =
           _readString(_employerProfile?['businessAddress']) ??
           _addressController.text.trim();
-      if (city.isEmpty || address.isEmpty) {
+      if (address.isEmpty) {
         return 'Your business address is missing. Enter a different address or choose remote.';
       }
+      if (_readString(_employerProfile?['businessPlaceId']) == null ||
+          _readMap(
+            _employerProfile?['businessLocation'] ??
+                _employerProfile?['location'],
+          ).isEmpty) {
+        return 'Validate your business address in your profile, or choose a different address.';
+      }
     }
-    if (_locationType == 'custom_address' &&
-        (_cityController.text.trim().isEmpty ||
-            _addressController.text.trim().isEmpty)) {
-      return 'Add city and address for the custom location.';
+    if (_locationType == 'custom_address' && _customResolvedAddress == null) {
+      return 'Please select a valid address from the list.';
     }
     return null;
   }
@@ -729,7 +781,6 @@ class _PostJobScreenState extends State<PostJobScreen> {
     _titleController.clear();
     _descriptionController.clear();
     _customCategoryController.clear();
-    _cityController.text = _readString(_employerProfile?['city']) ?? '';
     _addressController.text =
         _readString(_employerProfile?['businessAddress']) ?? '';
     setState(() {
@@ -775,10 +826,8 @@ class _PostJobScreenState extends State<PostJobScreen> {
   String get _locationText {
     if (_locationType == 'remote') return 'Remote job';
     final data = _locationData();
-    final city = _readString(data['city']);
     final address = _readString(data['address']);
-    if (city == null && address == null) return 'Location not set';
-    return [address, city].whereType<String>().join(', ');
+    return address ?? 'Location not set';
   }
 
   String get _skillsSummary {
@@ -1072,19 +1121,17 @@ class _PostJobScreenState extends State<PostJobScreen> {
                                 setState(() {
                                   _locationType = value;
                                   if (value == 'business_address') {
-                                    _cityController.text =
-                                        _readString(
-                                          _employerProfile?['city'],
-                                        ) ??
-                                        '';
                                     _addressController.text =
                                         _readString(
                                           _employerProfile?['businessAddress'],
                                         ) ??
                                         '';
                                   } else if (value == 'remote') {
-                                    _cityController.clear();
                                     _addressController.clear();
+                                    _customResolvedAddress = null;
+                                  } else if (value == 'custom_address') {
+                                    _addressController.clear();
+                                    _customResolvedAddress = null;
                                   }
                                 });
                               },
@@ -1100,48 +1147,19 @@ class _PostJobScreenState extends State<PostJobScreen> {
                       ],
                       if (_locationType == 'custom_address') ...[
                         const SizedBox(height: 10),
-                        Autocomplete<String>(
-                          optionsBuilder: (value) {
-                            final query = value.text.trim().toLowerCase();
-                            if (query.isEmpty) return israelCities.take(8);
-                            return israelCities.where(
-                              (city) => city.toLowerCase().contains(query),
-                            );
-                          },
-                          onSelected: (value) => _cityController.text = value,
-                          fieldViewBuilder:
-                              (
-                                context,
-                                controller,
-                                focusNode,
-                                onFieldSubmitted,
-                              ) {
-                                if (controller.text != _cityController.text) {
-                                  controller.text = _cityController.text;
-                                }
-                                return TextField(
-                                  controller: controller,
-                                  focusNode: focusNode,
-                                  enabled: !busy,
-                                  style: AppTextStyles.input,
-                                  onChanged: (value) =>
-                                      _cityController.text = value,
-                                  decoration: _compactDecoration(
-                                    label: 'City',
-                                    hint: 'Tel Aviv-Yafo',
-                                  ),
-                                );
-                              },
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
+                        AddressAutocompleteField(
                           controller: _addressController,
                           enabled: !busy,
-                          style: AppTextStyles.input,
                           decoration: _compactDecoration(
                             label: 'Address',
-                            hint: 'Street and number',
+                            hint: 'Start typing and select an address',
                           ),
+                          initialAddress: _customResolvedAddress,
+                          onAddressChanged: (address) {
+                            setState(() {
+                              _customResolvedAddress = address;
+                            });
+                          },
                         ),
                       ],
                       if (_locationType == 'remote') ...[
@@ -2011,9 +2029,7 @@ class _FormActions extends StatelessWidget {
             height: 46,
             child: ElevatedButton(
               onPressed: busy ? null : onPublish,
-              style: AppButtonStyles.primary(
-                foregroundColor: AppColors.navyBg,
-              ),
+              style: AppButtonStyles.primary(foregroundColor: AppColors.navyBg),
               child: busy
                   ? const _ButtonProgress()
                   : Text(
@@ -2181,6 +2197,24 @@ Map<String, dynamic> _readMap(Object? value) {
   return {};
 }
 
+ResolvedAddress? _resolvedAddressFromProfile(Map<String, dynamic> profile) {
+  final location = _readMap(profile['businessLocation'] ?? profile['location']);
+  final lat = _readDouble(location['lat']);
+  final lng = _readDouble(location['lng']);
+  final placeId = _readString(profile['businessPlaceId']);
+  final address = _readString(profile['businessAddress']);
+  if (lat == null || lng == null || placeId == null || address == null) {
+    return null;
+  }
+  return ResolvedAddress(
+    formattedAddress: address,
+    placeId: placeId,
+    latitude: lat,
+    longitude: lng,
+    country: _readString(profile['businessCountry']),
+  );
+}
+
 String? _readString(Object? value) {
   if (value is! String) return null;
   final trimmed = value.trim();
@@ -2200,13 +2234,17 @@ DateTime? _readDateTime(Object? value) {
 
 List<_ShiftDraft> _readShiftDrafts(Object? value) {
   if (value is! List) return const [];
-  return value.whereType<Map>().map((shiftData) {
-    return _ShiftDraft()
-      ..startTime = _parseTimeOfDay(_readString(shiftData['startTime']))
-      ..endTime = _parseTimeOfDay(_readString(shiftData['endTime']));
-  }).where((shift) {
-    return shift.startTime != null || shift.endTime != null;
-  }).toList();
+  return value
+      .whereType<Map>()
+      .map((shiftData) {
+        return _ShiftDraft()
+          ..startTime = _parseTimeOfDay(_readString(shiftData['startTime']))
+          ..endTime = _parseTimeOfDay(_readString(shiftData['endTime']));
+      })
+      .where((shift) {
+        return shift.startTime != null || shift.endTime != null;
+      })
+      .toList();
 }
 
 TimeOfDay? _parseTimeOfDay(String? value) {
@@ -2264,7 +2302,6 @@ Map<String, Object?> _normalizedLocation(Object? value) {
   final location = _readMap(value);
   return {
     'type': _readString(location['type']) ?? '',
-    'city': _readString(location['city']) ?? '',
     'address': _readString(location['address']) ?? '',
     'lat': _readDouble(location['lat']),
     'lng': _readDouble(location['lng']),

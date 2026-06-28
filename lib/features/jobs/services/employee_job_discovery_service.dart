@@ -17,6 +17,21 @@ class EmployeeJobDiscoveryService {
   final FirebaseFirestore _firestore;
   final NotificationService _notificationService;
 
+  Future<({double latitude, double longitude})?> loadEmployeeLocation() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    final snapshot = await _firestore
+        .collection('employeeProfiles')
+        .doc(user.uid)
+        .get();
+    final location = snapshot.data()?['location'];
+    if (location is! Map) return null;
+    final lat = _readDouble(location['lat']);
+    final lng = _readDouble(location['lng']);
+    if (lat == null || lng == null) return null;
+    return (latitude: lat, longitude: lng);
+  }
+
   Future<List<EmployeeJobDiscoveryItem>> loadJobs() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -346,4 +361,10 @@ String? _readString(Object? value) {
   }
   final trimmed = value.trim();
   return trimmed.isEmpty ? null : trimmed;
+}
+
+double? _readDouble(Object? value) {
+  return value is num
+      ? value.toDouble()
+      : double.tryParse(value?.toString() ?? '');
 }
