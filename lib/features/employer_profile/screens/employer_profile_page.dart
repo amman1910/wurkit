@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -220,8 +219,7 @@ class _EmployerProfilePageState extends State<EmployerProfilePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) =>
-          _EditLocationSheet(profile: profile, onSave: _saveProfileUpdates),
+      builder: (context) => _EditLocationSheet(profile: profile),
     );
     if (!mounted) return;
     if (result == true) {
@@ -1290,10 +1288,15 @@ class _SheetHeader extends StatelessWidget {
 }
 
 class _SheetContent extends StatelessWidget {
-  const _SheetContent({required this.children, required this.onSave});
+  const _SheetContent({
+    required this.children,
+    required this.onSave,
+    this.saveEnabled = true,
+  });
 
   final List<Widget> children;
   final Future<void> Function() onSave;
+  final bool saveEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1306,7 +1309,7 @@ class _SheetContent extends StatelessWidget {
           width: double.infinity,
           height: 48,
           child: ElevatedButton(
-            onPressed: onSave,
+            onPressed: saveEnabled ? onSave : null,
             style: AppButtonStyles.primary(foregroundColor: AppColors.navyBg),
             child: const Text(
               'Save',
@@ -1431,16 +1434,16 @@ class _EditBusinessInfoSheetState extends State<_EditBusinessInfoSheet> {
 }
 
 class _EditLocationSheet extends StatefulWidget {
-  const _EditLocationSheet({required this.profile, required this.onSave});
+  const _EditLocationSheet({required this.profile});
 
   final Map<String, dynamic> profile;
-  final Future<void> Function(Map<String, dynamic> data) onSave;
 
   @override
   State<_EditLocationSheet> createState() => _EditLocationSheetState();
 }
 
 class _EditLocationSheetState extends State<_EditLocationSheet> {
+  final EmployerProfileService _profileService = EmployerProfileService();
   late final TextEditingController _addressController;
   late bool _isPhysicalBusiness;
   ResolvedAddress? _resolvedAddress;
@@ -1468,10 +1471,16 @@ class _EditLocationSheetState extends State<_EditLocationSheet> {
         country: _readString(widget.profile, 'businessCountry'),
       );
     }
+    _addressController.addListener(_onAddressTextChanged);
+  }
+
+  void _onAddressTextChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _addressController.removeListener(_onAddressTextChanged);
     _addressController.dispose();
     super.dispose();
   }
@@ -1482,32 +1491,20 @@ class _EditLocationSheetState extends State<_EditLocationSheet> {
       return;
     }
     final resolved = _resolvedAddress;
-    final update = <String, dynamic>{
-      'isPhysicalBusiness': _isPhysicalBusiness,
-      'locationPermissionGranted': false,
-      'city': FieldValue.delete(),
-      'businessCity': FieldValue.delete(),
-      if (_isPhysicalBusiness && resolved != null) ...{
-        'businessAddress': formatAddressForDisplay(resolved.formattedAddress),
-        'businessPlaceId': resolved.placeId,
-        'businessLocation': {
-          'lat': resolved.latitude,
-          'lng': resolved.longitude,
-        },
-        'location': {'lat': resolved.latitude, 'lng': resolved.longitude},
-        if (resolved.country != null) 'businessCountry': resolved.country,
-      } else ...{
-        'businessAddress': FieldValue.delete(),
-        'businessPlaceId': FieldValue.delete(),
-        'businessLocation': FieldValue.delete(),
-        'businessCountry': FieldValue.delete(),
-        'location': FieldValue.delete(),
-      },
-    };
 
     setState(() => _isSaving = true);
     try {
-      await widget.onSave(update);
+      await _profileService.saveBusinessLocation(
+        businessAddress: _isPhysicalBusiness && resolved != null
+            ? formatAddressForDisplay(resolved.formattedAddress)
+            : null,
+        isPhysicalBusiness: _isPhysicalBusiness,
+        locationPermissionGranted: false,
+        placeId: _isPhysicalBusiness ? resolved?.placeId : null,
+        country: _isPhysicalBusiness ? resolved?.country : null,
+        latitude: _isPhysicalBusiness ? resolved?.latitude : null,
+        longitude: _isPhysicalBusiness ? resolved?.longitude : null,
+      );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (_) {
@@ -1539,6 +1536,7 @@ class _EditLocationSheetState extends State<_EditLocationSheet> {
       isSaving: _isSaving,
       child: _SheetContent(
         onSave: _handleSave,
+        saveEnabled: !_isPhysicalBusiness || _resolvedAddress != null,
         children: [
           if (_isPhysicalBusiness) ...[
             AddressAutocompleteField(
@@ -1548,6 +1546,15 @@ class _EditLocationSheetState extends State<_EditLocationSheet> {
               onAddressChanged: (address) =>
                   setState(() => _resolvedAddress = address),
             ),
+            if (_addressController.text.trim().isNotEmpty &&
+                _resolvedAddress == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 12),
+                child: Text(
+                  'Please select a valid address from the list.',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
             const SizedBox(height: 12),
           ],
           _SwitchRow(
