@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
-import '../../applications/screens/employee_applications_page.dart';
-import '../../employee_profile/screens/employee_profile_page.dart';
-import '../../jobs/screens/employee_jobs_page.dart';
+import '../../../shared/utils/distance_utils.dart';
 import '../../jobs/screens/job_details_page.dart';
-import '../../reviews/widgets/public_profile_reviews_section.dart';
 import '../services/employee_home_service.dart';
 
 class EmployeeHomePage extends StatefulWidget {
@@ -98,10 +95,6 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
     );
   }
 
-  void _openPage(Widget page) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
-  }
-
   String _friendlyError(Object error) {
     final message = error.toString().replaceFirst('Exception: ', '').trim();
     if (message.isEmpty) {
@@ -159,13 +152,6 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
                       onTap: _enableLocation,
                     ),
                   ],
-                  const SizedBox(height: AppSpacing.section + 8),
-                  _QuickActionsSection(
-                    onFindJobs: () => _openPage(const EmployeeJobsPage()),
-                    onApplications: () =>
-                        _openPage(const EmployeeApplicationsPage()),
-                    onProfile: () => _openPage(const EmployeeProfilePage()),
-                  ),
                   const SizedBox(height: AppSpacing.section + 8),
                   _JobsHomeContent(
                     profile: profile,
@@ -451,109 +437,6 @@ class _LocationPermissionCard extends StatelessWidget {
   }
 }
 
-class _QuickActionsSection extends StatelessWidget {
-  const _QuickActionsSection({
-    required this.onFindJobs,
-    required this.onApplications,
-    required this.onProfile,
-  });
-
-  final VoidCallback onFindJobs;
-  final VoidCallback onApplications;
-  final VoidCallback onProfile;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionTitle('Quick actions'),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _QuickActionCard(
-                icon: Icons.search_rounded,
-                label: 'Find jobs',
-                onTap: onFindJobs,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _QuickActionCard(
-                icon: Icons.assignment_outlined,
-                label: 'My applications',
-                onTap: onApplications,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _QuickActionCard(
-                icon: Icons.person_outline_rounded,
-                label: 'Update profile',
-                onTap: onProfile,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickActionCard extends StatelessWidget {
-  const _QuickActionCard({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Ink(
-          height: 86,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: AppColors.coralAccent, size: 22),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    height: 1.1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _JobsHomeContent extends StatelessWidget {
   const _JobsHomeContent({
     required this.profile,
@@ -631,7 +514,10 @@ class _JobsContentScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final urgentJobs = jobs.where((job) => job.urgent).take(2).toList();
+    final distances = <String, double?>{
+      for (final job in jobs) job.id: _distanceTo(job),
+    };
+    final nearbyJobs = _nearbyJobs(distances);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,19 +531,45 @@ class _JobsContentScaffold extends StatelessWidget {
         _RecommendedJobsSection(
           jobs: jobs,
           isLoading: isLoading,
+          distanceFor: (job) => distances[job.id],
           employerPreviewFor: employerPreviewFor,
           onJobTap: onJobTap,
         ),
-        if (!isLoading && urgentJobs.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.section + 8),
-          _UrgentJobsSection(
-            jobs: urgentJobs,
-            employerPreviewFor: employerPreviewFor,
-            onJobTap: onJobTap,
-          ),
-        ],
+        const SizedBox(height: AppSpacing.section + 8),
+        _RecommendedJobsSection(
+          title: 'Nearby jobs',
+          jobs: nearbyJobs,
+          isLoading: isLoading,
+          distanceFor: (job) => distances[job.id],
+          emptyMessage: profile.hasUsableLocation
+              ? 'No nearby jobs available right now.'
+              : 'Enable location to see nearby jobs.',
+          employerPreviewFor: employerPreviewFor,
+          onJobTap: onJobTap,
+        ),
       ],
     );
+  }
+
+  double? _distanceTo(EmployeeHomeJob job) {
+    if (!profile.hasUsableLocation || !job.hasCoordinates) return null;
+    return calculateDistanceKm(
+      lat1: profile.latitude!,
+      lng1: profile.longitude!,
+      lat2: job.latitude!,
+      lng2: job.longitude!,
+    );
+  }
+
+  List<EmployeeHomeJob> _nearbyJobs(Map<String, double?> distances) {
+    if (!profile.hasUsableLocation) return const [];
+    final withDistance =
+        jobs
+            .where((job) => distances[job.id] != null)
+            .map((job) => (job: job, distance: distances[job.id]!))
+            .toList()
+          ..sort((left, right) => left.distance.compareTo(right.distance));
+    return withDistance.take(5).map((item) => item.job).toList();
   }
 }
 
@@ -772,14 +684,20 @@ class _StatDivider extends StatelessWidget {
 
 class _RecommendedJobsSection extends StatelessWidget {
   const _RecommendedJobsSection({
+    this.title = 'Recommended for you',
     required this.jobs,
     required this.isLoading,
+    required this.distanceFor,
+    this.emptyMessage,
     required this.employerPreviewFor,
     required this.onJobTap,
   });
 
   final List<EmployeeHomeJob> jobs;
+  final String title;
   final bool isLoading;
+  final double? Function(EmployeeHomeJob job) distanceFor;
+  final String? emptyMessage;
   final Future<EmployerPreview?> Function(String employerId) employerPreviewFor;
   final ValueChanged<EmployeeHomeJob> onJobTap;
 
@@ -788,7 +706,7 @@ class _RecommendedJobsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('Recommended for you'),
+        _SectionTitle(title),
         const SizedBox(height: 14),
         if (isLoading)
           const SizedBox(
@@ -798,7 +716,7 @@ class _RecommendedJobsSection extends StatelessWidget {
             ),
           )
         else if (jobs.isEmpty)
-          const _EmptyJobsState()
+          _EmptyJobsState(message: emptyMessage)
         else
           SizedBox(
             height: 218,
@@ -811,6 +729,7 @@ class _RecommendedJobsSection extends StatelessWidget {
                   width: MediaQuery.sizeOf(context).width * 0.78,
                   child: _RecommendedJobCard(
                     job: jobs[index],
+                    distanceKm: distanceFor(jobs[index]),
                     employerPreviewFuture: employerPreviewFor(
                       jobs[index].employerId,
                     ),
@@ -825,126 +744,17 @@ class _RecommendedJobsSection extends StatelessWidget {
   }
 }
 
-class _UrgentJobsSection extends StatelessWidget {
-  const _UrgentJobsSection({
-    required this.jobs,
-    required this.employerPreviewFor,
-    required this.onJobTap,
-  });
-
-  final List<EmployeeHomeJob> jobs;
-  final Future<EmployerPreview?> Function(String employerId) employerPreviewFor;
-  final ValueChanged<EmployeeHomeJob> onJobTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionTitle('Urgent jobs'),
-        const SizedBox(height: 12),
-        for (final job in jobs) ...[
-          _UrgentJobTile(
-            job: job,
-            employerPreviewFuture: employerPreviewFor(job.employerId),
-            onTap: () => onJobTap(job),
-          ),
-          if (job != jobs.last) const SizedBox(height: 10),
-        ],
-      ],
-    );
-  }
-}
-
-class _UrgentJobTile extends StatelessWidget {
-  const _UrgentJobTile({
-    required this.job,
-    required this.employerPreviewFuture,
-    required this.onTap,
-  });
-
-  final EmployeeHomeJob job;
-  final Future<EmployerPreview?> employerPreviewFuture;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<EmployerPreview?>(
-      future: employerPreviewFuture,
-      builder: (context, snapshot) {
-        final employer = snapshot.data;
-
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(18),
-            child: Ink(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    _EmployerLogo(imageUrl: employer?.businessLogoUrl),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            job.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            employer?.businessName ??
-                                job.location ??
-                                'Wurkit employer',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.label,
-                          ),
-                          const SizedBox(height: 10),
-                          PublicProfileReviewsSection(userId: job.employerId),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: AppColors.coralAccent,
-                      size: 20,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _RecommendedJobCard extends StatelessWidget {
   const _RecommendedJobCard({
     required this.job,
     required this.employerPreviewFuture,
+    this.distanceKm,
     required this.onTap,
   });
 
   final EmployeeHomeJob job;
   final Future<EmployerPreview?> employerPreviewFuture;
+  final double? distanceKm;
   final VoidCallback onTap;
 
   @override
@@ -993,14 +803,30 @@ class _RecommendedJobCard extends StatelessWidget {
                                 style: AppTextStyles.label,
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                locationText,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 12,
-                                ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      locationText,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  if (distanceKm != null)
+                                    Text(
+                                      ' · ${distanceKm!.toStringAsFixed(1)} km away',
+                                      maxLines: 1,
+                                      style: const TextStyle(
+                                        color: AppColors.coralAccent,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ],
                           ),
@@ -1029,8 +855,6 @@ class _RecommendedJobCard extends StatelessWidget {
                         style: AppTextStyles.label,
                       ),
                     ],
-                    const SizedBox(height: 10),
-                    PublicProfileReviewsSection(userId: job.employerId),
                     const Spacer(),
                     Row(
                       children: [
@@ -1067,10 +891,7 @@ class _RecommendedJobCard extends StatelessWidget {
   }
 
   String _locationText(EmployeeHomeJob job, EmployerPreview? employer) {
-    return employer?.city ??
-        employer?.businessAddress ??
-        job.location ??
-        'Location shared soon';
+    return job.location ?? employer?.businessAddress ?? 'Location shared soon';
   }
 
   String _salaryText(EmployeeHomeJob job) {
@@ -1137,32 +958,36 @@ class _UrgentBadge extends StatelessWidget {
 }
 
 class _EmptyJobsState extends StatelessWidget {
-  const _EmptyJobsState();
+  const _EmptyJobsState({this.message});
+
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
-    return const _HomeCard(
+    return _HomeCard(
       child: Row(
         children: [
-          Icon(Icons.work_outline_rounded, color: AppColors.coralAccent),
-          SizedBox(width: 12),
+          const Icon(Icons.work_outline_rounded, color: AppColors.coralAccent),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'No open jobs yet',
-                  style: TextStyle(
+                  message ?? 'No open jobs yet',
+                  style: const TextStyle(
                     color: AppColors.white,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                SizedBox(height: 5),
-                Text(
-                  'New jobs will appear here when employers post them',
-                  style: AppTextStyles.label,
-                ),
+                if (message == null) ...[
+                  const SizedBox(height: 5),
+                  const Text(
+                    'New jobs will appear here when employers post them',
+                    style: AppTextStyles.label,
+                  ),
+                ],
               ],
             ),
           ),

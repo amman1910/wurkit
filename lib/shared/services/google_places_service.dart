@@ -128,6 +128,64 @@ class GooglePlacesService {
     );
   }
 
+  Future<String?> reverseGeocodeLocality({
+    required double latitude,
+    required double longitude,
+  }) async {
+    _requireKey();
+    final response = await _client.get(
+      Uri.https('maps.googleapis.com', '/maps/api/geocode/json', {
+        'latlng': '$latitude,$longitude',
+        'key': GoogleMapsConfig.apiKey,
+        'language': 'en',
+        'region': 'il',
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw GooglePlacesException(_apiError(response));
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final status = body['status']?.toString();
+    if (status == 'ZERO_RESULTS') return null;
+    if (status != 'OK') {
+      throw GooglePlacesException(
+        body['error_message']?.toString() ?? 'Reverse geocoding failed.',
+      );
+    }
+
+    final candidates = <String, String>{};
+    final results = body['results'];
+    if (results is List) {
+      for (final result in results.whereType<Map<String, dynamic>>()) {
+        final components = result['address_components'];
+        if (components is! List) continue;
+        for (final component in components.whereType<Map<String, dynamic>>()) {
+          final name = component['long_name']?.toString().trim();
+          if (name == null || name.isEmpty) continue;
+          final types =
+              (component['types'] as List?)?.whereType<String>() ?? const [];
+          for (final type in types) {
+            candidates.putIfAbsent(type, () => name);
+          }
+        }
+      }
+    }
+
+    for (final type in const [
+      'locality',
+      'postal_town',
+      'administrative_area_level_3',
+      'sublocality_level_1',
+      'sublocality',
+      'administrative_area_level_2',
+    ]) {
+      final name = candidates[type];
+      if (name != null) return name;
+    }
+    return null;
+  }
+
   String _apiError(http.Response response) {
     try {
       final body = jsonDecode(response.body) as Map<String, dynamic>;

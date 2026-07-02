@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../applications/screens/employer_application_details_page.dart';
 import '../../jobs/screens/job_details_page.dart';
 import '../../reports/screens/submit_report_screen.dart';
 import '../services/chat_service.dart';
@@ -113,8 +114,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       return;
     }
 
-    final employeeId = _readText(chat['employeeId']);
-    final employerId = _readText(chat['employerId']);
+    final employeeId = _readChatText(chat['employeeId']);
+    final employerId = _readChatText(chat['employerId']);
     final participantNames = chat['participantNames'] is Map
         ? Map<String, dynamic>.from(chat['participantNames'] as Map)
         : <String, dynamic>{};
@@ -301,12 +302,11 @@ class _ChatHeader extends StatelessWidget {
     final otherName = chatService.getOtherParticipantName(chat);
     final otherImage = chatService.getOtherParticipantImage(chat);
     final jobTitle = chat['jobTitle'] as String? ?? 'Matched job';
-    final jobId = chat['jobId'] as String?;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _openJobDetails(context, jobId),
+        onTap: () => _openHeaderTarget(context),
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
         child: Ink(
           padding: const EdgeInsets.fromLTRB(8, 10, 18, 16),
@@ -382,8 +382,32 @@ class _ChatHeader extends StatelessWidget {
     );
   }
 
-  void _openJobDetails(BuildContext context, String? jobId) {
-    if (jobId == null || jobId.trim().isEmpty) {
+  void _openHeaderTarget(BuildContext context) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final employeeId = _readChatText(chat['employeeId']);
+    final employerId = _readChatText(chat['employerId']);
+
+    if (currentUserId == employerId) {
+      final applicationId = _readChatText(chat['applicationId']);
+      if (applicationId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Candidate details are not available.')),
+        );
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              EmployerApplicationDetailsPage(applicationId: applicationId),
+        ),
+      );
+      return;
+    }
+
+    if (currentUserId != employeeId) return;
+    final jobId = _readChatText(chat['jobId']);
+    if (jobId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Job details are not available')),
       );
@@ -397,6 +421,11 @@ class _ChatHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+String _readChatText(Object? value) {
+  if (value is String) return value.trim();
+  return value?.toString().trim() ?? '';
 }
 
 class _HeaderAvatar extends StatelessWidget {

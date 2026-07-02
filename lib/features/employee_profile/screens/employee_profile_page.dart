@@ -11,6 +11,7 @@ import '../../reviews/screens/user_reviews_list.dart';
 import '../../reviews/widgets/user_rating_summary.dart';
 import '../services/employee_profile_service.dart';
 import 'employee_basic_info_page.dart';
+import 'employee_profile_preview_page.dart';
 
 class EmployeeProfilePage extends StatefulWidget {
   const EmployeeProfilePage({super.key});
@@ -48,7 +49,7 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
             }
 
             return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -56,39 +57,44 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
                     profile: profile,
                     isUploadingImage: _isUploadingImage,
                     onEditImage: _updateProfileImage,
+                    onPreview: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const EmployeeProfilePreviewPage(),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _ReviewsSection(
                     userId: FirebaseAuth.instance.currentUser?.uid,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _ProfileCompletionCard(
                     profile: profile,
                     onTap: () => _showProfileSummarySheet(profile),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _WorkPreferencesCard(
                     profile: profile,
                     onEdit: () => _showEditWorkPreferencesSheet(profile),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _AvailabilityLocationCard(
                     profile: profile,
                     onEdit: () => _showEditAvailabilitySheet(profile),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _ExperienceCard(
                     profile: profile,
                     onEdit: () => _showEditExperienceSheet(profile),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _LogoutActionCard(onTap: _confirmAndLogout),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _DeleteAccountActionCard(
                     onTap: _isDeletingAccount ? null : _confirmAndDeleteAccount,
                     isLoading: _isDeletingAccount,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                 ],
               ),
             );
@@ -794,7 +800,7 @@ class _ReviewsSection extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.surface.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(20),
@@ -807,15 +813,16 @@ class _ReviewsSection extends StatelessWidget {
             'Ratings & Reviews',
             style: TextStyle(
               color: AppColors.white,
-              fontSize: 18,
+              fontSize: 17,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 10),
-          UserRatingSummary(userId: currentUserId),
-          const SizedBox(height: 12),
+          const SizedBox(height: 7),
+          UserRatingSummary(userId: currentUserId, compact: true),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
+            height: 40,
             child: OutlinedButton(
               onPressed: () {
                 Navigator.push(
@@ -843,11 +850,13 @@ class _ProfileHeaderCard extends StatelessWidget {
     required this.profile,
     required this.isUploadingImage,
     required this.onEditImage,
+    required this.onPreview,
   });
 
   final Map<String, dynamic> profile;
   final bool isUploadingImage;
   final VoidCallback onEditImage;
+  final VoidCallback onPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -862,7 +871,7 @@ class _ProfileHeaderCard extends StatelessWidget {
     final locationLabel = _locationLabel(profile);
 
     return _PremiumCard(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      padding: const EdgeInsets.fromLTRB(13, 13, 13, 11),
       child: Column(
         children: [
           Row(
@@ -872,7 +881,7 @@ class _ProfileHeaderCard extends StatelessWidget {
                 isUploading: isUploadingImage,
                 onTap: onEditImage,
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -883,11 +892,11 @@ class _ProfileHeaderCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Color(0xE6FFFFFF),
-                        fontSize: 26,
+                        fontSize: 23,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     _StatusChip(
                       text: availableNow
                           ? 'Available now'
@@ -900,11 +909,20 @@ class _ProfileHeaderCard extends StatelessWidget {
                   ],
                 ),
               ),
+              IconButton(
+                onPressed: onPreview,
+                tooltip: 'Preview profile',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(
+                  Icons.visibility_outlined,
+                  color: AppColors.coralAccent,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           const Divider(color: AppColors.border, height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(height: 9),
           Row(
             children: [
               Expanded(
@@ -945,7 +963,7 @@ class _ProfileCompletionCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: _PremiumCard(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(11),
           child: Row(
             children: [
               Expanded(
@@ -979,7 +997,7 @@ class _ProfileCompletionCard extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 7),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(99),
                       child: LinearProgressIndicator(
@@ -991,7 +1009,7 @@ class _ProfileCompletionCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 5),
                     Text(
                       completion >= 100
                           ? 'Great job! Your profile is complete.'
@@ -1004,10 +1022,10 @@ class _ProfileCompletionCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Container(
-                width: 46,
-                height: 46,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: AppColors.navyBg.withOpacity(0.28),
                   shape: BoxShape.circle,
@@ -1016,7 +1034,7 @@ class _ProfileCompletionCard extends StatelessWidget {
                 child: const Icon(
                   Icons.star_rounded,
                   color: AppColors.coralAccent,
-                  size: 28,
+                  size: 23,
                 ),
               ),
             ],
@@ -1188,12 +1206,12 @@ class _ActionProfileCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: _PremiumCard(
-          padding: const EdgeInsets.all(13),
+          padding: const EdgeInsets.all(11),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _SectionIcon(icon: icon),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1213,9 +1231,11 @@ class _ActionProfileCard extends StatelessWidget {
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                              const SizedBox(height: 3),
+                              const SizedBox(height: 2),
                               Text(
                                 subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   color: AppColors.lightText,
                                   fontSize: 13,
@@ -1227,7 +1247,7 @@ class _ActionProfileCard extends StatelessWidget {
                         ?trailing,
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     child,
                   ],
                 ),
@@ -1243,7 +1263,7 @@ class _ActionProfileCard extends StatelessWidget {
 class _PremiumCard extends StatelessWidget {
   const _PremiumCard({
     required this.child,
-    this.padding = const EdgeInsets.all(14),
+    this.padding = const EdgeInsets.all(12),
   });
 
   final Widget child;
@@ -1261,8 +1281,8 @@ class _PremiumCard extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.10),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -1290,8 +1310,8 @@ class _ProfileImageButton extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Container(
-            width: 78,
-            height: 78,
+            width: 70,
+            height: 70,
             decoration: BoxDecoration(
               color: AppColors.navyBg.withOpacity(0.55),
               shape: BoxShape.circle,
@@ -1302,7 +1322,7 @@ class _ProfileImageButton extends StatelessWidget {
                   ? const Icon(
                       Icons.person_outline_rounded,
                       color: AppColors.coralAccent,
-                      size: 40,
+                      size: 36,
                     )
                   : Image.network(
                       imageUrl,
@@ -1311,7 +1331,7 @@ class _ProfileImageButton extends StatelessWidget {
                         return const Icon(
                           Icons.person_outline_rounded,
                           color: AppColors.coralAccent,
-                          size: 40,
+                          size: 36,
                         );
                       },
                     ),
@@ -1325,7 +1345,7 @@ class _ProfileImageButton extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: const Padding(
-                  padding: EdgeInsets.all(24),
+                  padding: EdgeInsets.all(21),
                   child: CircularProgressIndicator(
                     color: AppColors.coralAccent,
                     strokeWidth: 3,
@@ -1337,8 +1357,8 @@ class _ProfileImageButton extends StatelessWidget {
             right: -3,
             bottom: 3,
             child: Container(
-              width: 30,
-              height: 30,
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
                 color: AppColors.navyBg,
                 shape: BoxShape.circle,
@@ -1427,7 +1447,7 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(10),
@@ -1460,14 +1480,14 @@ class _SectionIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 46,
-      width: 46,
+      height: 40,
+      width: 40,
       decoration: BoxDecoration(
         color: AppColors.navyBg.withOpacity(0.38),
         shape: BoxShape.circle,
         border: Border.all(color: AppColors.border),
       ),
-      child: Icon(icon, color: AppColors.coralAccent, size: 24),
+      child: Icon(icon, color: AppColors.coralAccent, size: 21),
     );
   }
 }
@@ -1553,7 +1573,7 @@ class _PreviewChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: outline
             ? Colors.transparent
@@ -2118,12 +2138,12 @@ class _LogoutActionCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: _PremiumCard(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   color: AppColors.navyBg.withOpacity(0.35),
                   shape: BoxShape.circle,
@@ -2132,7 +2152,7 @@ class _LogoutActionCard extends StatelessWidget {
                 child: const Icon(
                   Icons.logout_rounded,
                   color: AppColors.coralAccent,
-                  size: 20,
+                  size: 19,
                 ),
               ),
               const SizedBox(width: 12),
@@ -2190,12 +2210,12 @@ class _DeleteAccountActionCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: _PremiumCard(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   color: destructive.withOpacity(0.10),
                   shape: BoxShape.circle,
@@ -2203,7 +2223,7 @@ class _DeleteAccountActionCard extends StatelessWidget {
                 ),
                 child: isLoading
                     ? const Padding(
-                        padding: EdgeInsets.all(9),
+                        padding: EdgeInsets.all(8),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: destructive,
@@ -2212,7 +2232,7 @@ class _DeleteAccountActionCard extends StatelessWidget {
                     : const Icon(
                         Icons.delete_outline_rounded,
                         color: destructive,
-                        size: 20,
+                        size: 19,
                       ),
               ),
               const SizedBox(width: 12),
@@ -2494,16 +2514,59 @@ List<Map<String, dynamic>> _readExperienceList(Map<String, dynamic> profile) {
 }
 
 String _locationLabel(Map<String, dynamic> profile) {
-  final city = _readString(profile, 'city');
-  final preferredLocation = _readString(profile, 'preferredLocation');
-  final address = _readString(profile, 'address');
-  if (city.isNotEmpty) return city;
-  if (preferredLocation.isNotEmpty) return preferredLocation;
-  if (address.isNotEmpty) return address;
-  return _readBool(profile, 'locationPermissionGranted') ||
-          _readMap(profile, 'location').isNotEmpty
+  for (final key in const [
+    'city',
+    'locality',
+    'town',
+    'village',
+    'municipality',
+    'locationName',
+  ]) {
+    final value = _readString(profile, key);
+    if (value.isNotEmpty) return _shortLocationName(value);
+  }
+
+  final location = _readMap(profile, 'location');
+  for (final key in const [
+    'city',
+    'locality',
+    'town',
+    'village',
+    'name',
+    'address',
+    'formattedAddress',
+  ]) {
+    final value = _readString(location, key);
+    if (value.isNotEmpty) return _shortLocationName(value);
+  }
+
+  for (final key in const [
+    'preferredLocation',
+    'savedAddress',
+    'formattedAddress',
+    'address',
+  ]) {
+    final value = _readString(profile, key);
+    if (value.isNotEmpty) return _shortLocationName(value);
+  }
+
+  return _readBool(profile, 'locationPermissionGranted') || location.isNotEmpty
       ? 'Location set'
-      : 'Location';
+      : 'Location not set';
+}
+
+String _shortLocationName(String value) {
+  final parts = value
+      .split(',')
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .where(
+        (part) =>
+            part.toLowerCase() != 'israel' &&
+            part != '\u05D9\u05E9\u05E8\u05D0\u05DC',
+      )
+      .toList();
+  return parts.isEmpty ? value.trim() : parts.last;
 }
 
 String _shortDays(List<String> days) {

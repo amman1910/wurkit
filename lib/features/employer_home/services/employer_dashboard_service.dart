@@ -28,6 +28,7 @@ class EmployerDashboardService {
     QuerySnapshot<Map<String, dynamic>>? applicationsSnapshot;
     QuerySnapshot<Map<String, dynamic>>? matchesSnapshot;
     QuerySnapshot<Map<String, dynamic>>? chatsSnapshot;
+    Map<String, Map<String, dynamic>>? candidateProfiles;
 
     void emitIfReady() {
       if (profileSnapshot == null ||
@@ -35,6 +36,7 @@ class EmployerDashboardService {
           applicationsSnapshot == null ||
           matchesSnapshot == null ||
           chatsSnapshot == null ||
+          candidateProfiles == null ||
           controller.isClosed) {
         return;
       }
@@ -47,6 +49,7 @@ class EmployerDashboardService {
           applicationsSnapshot: applicationsSnapshot!,
           matchesSnapshot: matchesSnapshot!,
           chatsSnapshot: chatsSnapshot!,
+          candidateProfiles: candidateProfiles!,
         ),
       );
     }
@@ -77,8 +80,15 @@ class EmployerDashboardService {
               .collection('applications')
               .where('employerId', isEqualTo: uid)
               .snapshots()
-              .listen((snapshot) {
+              .listen((snapshot) async {
                 applicationsSnapshot = snapshot;
+                try {
+                  candidateProfiles = await _loadRecentCandidateProfiles(
+                    snapshot,
+                  );
+                } catch (_) {
+                  candidateProfiles = const {};
+                }
                 emitIfReady();
               }, onError: controller.addError),
         );
@@ -112,6 +122,32 @@ class EmployerDashboardService {
 
     return controller.stream;
   }
+
+  Future<Map<String, Map<String, dynamic>>> _loadRecentCandidateProfiles(
+    QuerySnapshot<Map<String, dynamic>> applications,
+  ) async {
+    final docs = [...applications.docs]
+      ..sort(
+        (a, b) => _readTimestampMillis(
+          b.data()['createdAt'],
+        ).compareTo(_readTimestampMillis(a.data()['createdAt'])),
+      );
+    final employeeIds = docs
+        .map((doc) => _readString(doc.data()['employeeId']))
+        .whereType<String>()
+        .toSet()
+        .take(3)
+        .toList();
+    final snapshots = await Future.wait(
+      employeeIds.map(
+        (id) => _firestore.collection('employeeProfiles').doc(id).get(),
+      ),
+    );
+    return {
+      for (final snapshot in snapshots)
+        if (snapshot.exists) snapshot.id: snapshot.data() ?? {},
+    };
+  }
 }
 
 class EmployerDashboardData {
@@ -138,13 +174,20 @@ class EmployerDashboardData {
     required QuerySnapshot<Map<String, dynamic>> applicationsSnapshot,
     required QuerySnapshot<Map<String, dynamic>> matchesSnapshot,
     required QuerySnapshot<Map<String, dynamic>> chatsSnapshot,
+    required Map<String, Map<String, dynamic>> candidateProfiles,
   }) {
     final profile = profileSnapshot.data();
     final jobs = jobsSnapshot.docs
         .map((doc) => _JobRecord.fromDoc(doc))
         .toList();
     final applications = applicationsSnapshot.docs
-        .map((doc) => _ApplicationRecord.fromDoc(doc))
+        .map(
+          (doc) => _ApplicationRecord.fromDoc(
+            doc,
+            candidateProfile:
+                candidateProfiles[_readString(doc.data()['employeeId'])],
+          ),
+        )
         .toList();
     final matches = matchesSnapshot.docs.map((doc) => doc.data()).toList();
     final chats = chatsSnapshot.docs.map((doc) => doc.data()).toList();
@@ -209,6 +252,7 @@ class EmployerDashboardData {
       pendingApplications: pendingApplications.length,
       activeMatches: activeMatches,
       unreadMessages: unreadMessages,
+      urgentJobs: urgentOpenJobs,
     );
 
     return EmployerDashboardData(
@@ -242,12 +286,14 @@ class EmployerDashboardStats {
     required this.pendingApplications,
     required this.activeMatches,
     required this.unreadMessages,
+    required this.urgentJobs,
   });
 
   final int activeJobs;
   final int pendingApplications;
   final int activeMatches;
   final int unreadMessages;
+  final int urgentJobs;
 }
 
 enum EmployerAttentionType { applications, messages, urgentJobs }
@@ -266,6 +312,7 @@ class EmployerAttentionItem {
 
 class EmployerRecentApplication {
   const EmployerRecentApplication({
+    required this.id,
     required this.employeeName,
     this.employeeImageUrl,
     required this.jobTitle,
@@ -273,6 +320,7 @@ class EmployerRecentApplication {
     required this.createdAt,
   });
 
+  final String id;
   final String employeeName;
   final String? employeeImageUrl;
   final String jobTitle;
@@ -282,20 +330,24 @@ class EmployerRecentApplication {
 
 class EmployerActiveJob {
   const EmployerActiveJob({
+    required this.id,
     required this.title,
     this.date,
     this.shiftStart,
     this.shiftEnd,
     required this.applicationsCount,
     required this.urgent,
+    this.imageUrl,
   });
 
+  final String id;
   final String title;
   final String? date;
   final String? shiftStart;
   final String? shiftEnd;
   final int applicationsCount;
   final bool urgent;
+  final String? imageUrl;
 }
 
 class _JobRecord {
@@ -309,6 +361,7 @@ class _JobRecord {
     required this.isActiveFlag,
     required this.urgent,
     required this.createdAtMillis,
+    this.imageUrl,
   });
 
   final String id;
@@ -320,6 +373,7 @@ class _JobRecord {
   final bool isActiveFlag;
   final bool urgent;
   final int createdAtMillis;
+  final String? imageUrl;
 
   bool get isActive => status == 'open' || isActiveFlag;
 
@@ -339,23 +393,27 @@ class _JobRecord {
       isActiveFlag: data['isActive'] == true,
       urgent: data['urgent'] == true,
       createdAtMillis: _readTimestampMillis(data['createdAt']),
+      imageUrl: _readFirstString(data['imageUrls']),
     );
   }
 
   EmployerActiveJob toActiveJob({required int applicationsCount}) {
     return EmployerActiveJob(
+      id: id,
       title: title,
       date: date,
       shiftStart: shiftStart,
       shiftEnd: shiftEnd,
       applicationsCount: applicationsCount,
       urgent: urgent,
+      imageUrl: imageUrl,
     );
   }
 }
 
 class _ApplicationRecord {
   const _ApplicationRecord({
+    required this.id,
     required this.jobId,
     required this.employeeName,
     this.employeeImageUrl,
@@ -365,6 +423,7 @@ class _ApplicationRecord {
     this.createdAt,
   });
 
+  final String id;
   final String jobId;
   final String employeeName;
   final String? employeeImageUrl;
@@ -374,14 +433,21 @@ class _ApplicationRecord {
   final DateTime? createdAt;
 
   factory _ApplicationRecord.fromDoc(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
+    QueryDocumentSnapshot<Map<String, dynamic>> doc, {
+    Map<String, dynamic>? candidateProfile,
+  }) {
     final data = doc.data();
     final createdAt = data['createdAt'];
     return _ApplicationRecord(
+      id: doc.id,
       jobId: _readString(data['jobId']) ?? '',
-      employeeName: _readString(data['employeeName']) ?? 'Worker',
-      employeeImageUrl: _readString(data['employeeImageUrl']),
+      employeeName:
+          _readString(candidateProfile?['name']) ??
+          _readString(data['employeeName']) ??
+          'Worker',
+      employeeImageUrl:
+          _readString(candidateProfile?['profileImageUrl']) ??
+          _readString(data['employeeImageUrl']),
       jobTitle: _readString(data['jobTitle']) ?? 'Job',
       status: _readString(data['status']) ?? 'pending',
       createdAtMillis: _readTimestampMillis(createdAt),
@@ -391,6 +457,7 @@ class _ApplicationRecord {
 
   EmployerRecentApplication toRecentApplication() {
     return EmployerRecentApplication(
+      id: id,
       employeeName: employeeName,
       employeeImageUrl: employeeImageUrl,
       jobTitle: jobTitle,
@@ -457,4 +524,13 @@ Map<String, dynamic> _readMap(Object? value) {
     return Map<String, dynamic>.from(value);
   }
   return {};
+}
+
+String? _readFirstString(Object? value) {
+  if (value is! List) return null;
+  for (final item in value) {
+    final text = _readString(item);
+    if (text != null) return text;
+  }
+  return null;
 }

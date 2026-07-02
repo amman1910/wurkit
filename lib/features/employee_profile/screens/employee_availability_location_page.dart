@@ -11,10 +11,12 @@ class EmployeeAvailabilityLocationPage extends StatefulWidget {
   const EmployeeAvailabilityLocationPage({super.key, this.isEditing = false});
 
   @override
-  State<EmployeeAvailabilityLocationPage> createState() => _EmployeeAvailabilityLocationPageState();
+  State<EmployeeAvailabilityLocationPage> createState() =>
+      _EmployeeAvailabilityLocationPageState();
 }
 
-class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityLocationPage>
+class _EmployeeAvailabilityLocationPageState
+    extends State<EmployeeAvailabilityLocationPage>
     with SingleTickerProviderStateMixin {
   final EmployeeProfileService _profileService = EmployeeProfileService();
 
@@ -27,7 +29,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
   double? _longitude;
   String _locationStatusMessage = '';
 
-  double _radiusKm = 10;
+  double _radiusKm = 40;
 
   bool _isAvailableNow = false;
   bool _canWorkShortNotice = false;
@@ -57,7 +59,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
     'Night',
   ];
 
-  static const List<double> radiusOptions = [2, 5, 10, 15, 20, 30];
+  static const List<double> radiusOptions = [0, 30, 60, 90, 120];
 
   @override
   void initState() {
@@ -95,17 +97,12 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       const Interval(0.85, 1.0, curve: Curves.easeOutCubic),
     ];
     return Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: intervals[index],
-      ),
+      CurvedAnimation(parent: _animationController, curve: intervals[index]),
     );
   }
 
   bool get _isFormValid {
-    return (widget.isEditing || _locationPermissionHandled) &&
-           _selectedDays.isNotEmpty &&
-           _selectedShiftTypes.isNotEmpty;
+    return _selectedDays.isNotEmpty && _selectedShiftTypes.isNotEmpty;
   }
 
   Future<void> _loadExistingProfile() async {
@@ -115,24 +112,37 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
 
       if (profile != null) {
         final location = profile['location'];
-        _radiusKm = _readDouble(profile, 'preferredWorkRadiusKm', _radiusKm)
-            .clamp(2, 30)
-            .toDouble();
-        _isAvailableNow = _readBool(profile, 'availableNow', _readBool(profile, 'isAvailableNow', false));
+        _radiusKm = _readDouble(
+          profile,
+          'preferredWorkRadiusKm',
+          _radiusKm,
+        ).clamp(0, 120).toDouble();
+        _isAvailableNow = _readBool(
+          profile,
+          'availableNow',
+          _readBool(profile, 'isAvailableNow', false),
+        );
         _canWorkShortNotice = _readBool(
           profile,
           'canWorkOnShortNotice',
           _readBool(profile, 'canWorkShortNotice', false),
         );
         _canWorkToday = _readBool(profile, 'canWorkToday', false);
-        _selectedDays = _readStringList(profile, 'availableDays')
-            .where(availableDays.contains)
-            .toList();
-        _selectedShiftTypes = _readStringList(profile, 'preferredShiftTypes')
-            .where(shiftTypes.contains)
-            .toList();
-        _locationPermissionGranted = _readBool(profile, 'locationPermissionGranted', false);
-        _locationPermissionHandled = profile.containsKey('locationPermissionGranted') || location is Map;
+        _selectedDays = _readStringList(
+          profile,
+          'availableDays',
+        ).where(availableDays.contains).toList();
+        _selectedShiftTypes = _readStringList(
+          profile,
+          'preferredShiftTypes',
+        ).where(shiftTypes.contains).toList();
+        _locationPermissionGranted = _readBool(
+          profile,
+          'locationPermissionGranted',
+          false,
+        );
+        _locationPermissionHandled =
+            profile.containsKey('locationPermissionGranted') || location is Map;
 
         if (location is Map) {
           _latitude = _readNullableDouble(location['lat']);
@@ -159,7 +169,10 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
   List<String> _readStringList(Map<String, dynamic> data, String key) {
     final value = data[key];
     if (value is List) {
-      return value.map((item) => item.toString()).where((item) => item.isNotEmpty).toList();
+      return value
+          .map((item) => item.toString())
+          .where((item) => item.isNotEmpty)
+          .toList();
     }
     return const [];
   }
@@ -184,10 +197,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red.shade600,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red.shade600),
     );
   }
 
@@ -204,7 +214,8 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
         setState(() {
           _locationPermissionHandled = true;
           _locationPermissionGranted = false;
-          _locationStatusMessage = 'Location services are turned off. You can continue without location, but matches may be less accurate.';
+          _locationStatusMessage =
+              'Location services are turned off. You can continue without location, but matches may be less accurate.';
         });
         return;
       }
@@ -219,7 +230,8 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
           setState(() {
             _locationPermissionHandled = true;
             _locationPermissionGranted = false;
-            _locationStatusMessage = 'Location access denied. You can continue without location, but matches may be less accurate.';
+            _locationStatusMessage =
+                'Location access denied. You can continue without location, but matches may be less accurate.';
           });
           return;
         }
@@ -229,7 +241,8 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
         setState(() {
           _locationPermissionHandled = true;
           _locationPermissionGranted = false;
-          _locationStatusMessage = 'Location permission permanently denied. Please enable location permission in app settings. You can continue without location, but matches may be less accurate.';
+          _locationStatusMessage =
+              'Location permission permanently denied. Please enable location permission in app settings. You can continue without location, but matches may be less accurate.';
         });
         return;
       }
@@ -253,7 +266,8 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       setState(() {
         _locationPermissionHandled = true;
         _locationPermissionGranted = false;
-        _locationStatusMessage = 'Unable to get location. You can continue without location, but matches may be less accurate.';
+        _locationStatusMessage =
+            'Unable to get location. You can continue without location, but matches may be less accurate.';
       });
     }
   }
@@ -458,10 +472,14 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _isFormValid && !isBusy ? _handleContinue : null,
+                      onPressed: _isFormValid && !isBusy
+                          ? _handleContinue
+                          : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navyBg,
-                        disabledBackgroundColor: AppColors.navyBg.withOpacity(0.45),
+                        disabledBackgroundColor: AppColors.navyBg.withOpacity(
+                          0.45,
+                        ),
                         shape: const StadiumBorder(),
                       ),
                       child: isBusy
@@ -470,7 +488,9 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
                             )
                           : Text(
                               widget.isEditing ? 'Save changes' : 'Continue',
-                              style: AppTextStyles.buttonLabel(color: AppColors.coralAccent),
+                              style: AppTextStyles.buttonLabel(
+                                color: AppColors.coralAccent,
+                              ),
                             ),
                     ),
                   ),
@@ -492,12 +512,12 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
                     height: 48,
                     child: TextButton(
                       onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        shape: const StadiumBorder(),
-                      ),
+                      style: TextButton.styleFrom(shape: const StadiumBorder()),
                       child: Text(
                         'Back',
-                        style: AppTextStyles.buttonLabel(color: AppColors.navyBg),
+                        style: AppTextStyles.buttonLabel(
+                          color: AppColors.navyBg,
+                        ),
                       ),
                     ),
                   ),
@@ -519,21 +539,14 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.location_on,
-                color: AppColors.coralAccent,
-                size: 24,
-              ),
+              Icon(Icons.location_on, color: AppColors.coralAccent, size: 24),
               const SizedBox(width: 12),
               Text(
                 'Use your current location',
@@ -589,8 +602,12 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
               child: Row(
                 children: [
                   Icon(
-                    _locationPermissionGranted ? Icons.check_circle : Icons.info,
-                    color: _locationPermissionGranted ? AppColors.coralAccent : Colors.orange,
+                    _locationPermissionGranted
+                        ? Icons.check_circle
+                        : Icons.info,
+                    color: _locationPermissionGranted
+                        ? AppColors.coralAccent
+                        : Colors.orange,
                     size: 20,
                   ),
                   const SizedBox(width: 12),
@@ -619,10 +636,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,15 +669,14 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
           const SizedBox(height: 16),
           Slider(
             value: _radiusKm,
-            min: 2,
-            max: 30,
-            divisions: 5,
+            min: 0,
+            max: 120,
+            divisions: 24,
             activeColor: AppColors.coralAccent,
             inactiveColor: AppColors.surface.withOpacity(0.5),
             onChanged: (value) {
               setState(() {
-                _radiusKm = radiusOptions.reduce((a, b) =>
-                    (value - a).abs() < (value - b).abs() ? a : b);
+                _radiusKm = value;
               });
             },
           ),
@@ -691,10 +704,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -740,10 +750,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -803,10 +810,7 @@ class _EmployeeAvailabilityLocationPageState extends State<EmployeeAvailabilityL
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

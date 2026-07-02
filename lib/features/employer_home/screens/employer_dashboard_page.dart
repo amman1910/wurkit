@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui.dart';
+import '../../applications/screens/employer_application_details_page.dart';
 import '../../applications/screens/employer_applications_page.dart';
+import '../../jobs/screens/employer_job_details_page.dart';
 import '../../jobs/screens/employer_jobs_page.dart';
+import '../../jobs/screens/post_job_screen.dart';
 import '../../messages/screens/messages_page.dart';
 import '../services/employer_dashboard_service.dart';
 
@@ -67,24 +70,24 @@ class _EmployerDashboardPageState extends State<EmployerDashboardPage> {
                   _AnimatedSection(
                     index: 1,
                     child: _PrimaryActionCard(
-                      onTap: () => _openPage(const EmployerJobsPage()),
+                      onTap: () => _openPage(const PostJobScreen()),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.section + 4),
+                  const SizedBox(height: 18),
                   _AnimatedSection(
                     index: 2,
                     child: _HiringSnapshot(stats: data.stats),
                   ),
                   if (data.isNewEmployer) ...[
-                    const SizedBox(height: AppSpacing.section + 4),
+                    const SizedBox(height: 18),
                     _AnimatedSection(
                       index: 3,
                       child: _NewEmployerState(
-                        onCreateJob: () => _openPage(const EmployerJobsPage()),
+                        onCreateJob: () => _openPage(const PostJobScreen()),
                       ),
                     ),
                   ] else ...[
-                    const SizedBox(height: AppSpacing.section + 4),
+                    const SizedBox(height: 18),
                     _AnimatedSection(
                       index: 3,
                       child: _NeedsAttentionSection(
@@ -96,21 +99,28 @@ class _EmployerDashboardPageState extends State<EmployerDashboardPage> {
                         onOpenJobs: () => _openPage(const EmployerJobsPage()),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.section + 4),
+                    const SizedBox(height: 18),
                     _AnimatedSection(
                       index: 4,
                       child: _RecentApplicationsSection(
                         applications: data.recentApplications,
-                        onTap: () =>
+                        onViewAll: () =>
                             _openPage(const EmployerApplicationsPage()),
+                        onOpen: (application) => _openPage(
+                          EmployerApplicationDetailsPage(
+                            applicationId: application.id,
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.section + 4),
+                    const SizedBox(height: 18),
                     _AnimatedSection(
                       index: 5,
                       child: _ActiveJobsSection(
                         jobs: data.activeJobs,
-                        onTap: () => _openPage(const EmployerJobsPage()),
+                        onViewAll: () => _openPage(const EmployerJobsPage()),
+                        onOpen: (job) =>
+                            _openPage(EmployerJobDetailsPage(jobId: job.id)),
                       ),
                     ),
                   ],
@@ -132,11 +142,11 @@ class _BrandedHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final greeting = businessName == 'your business'
-        ? 'Welcome back 👋'
-        : 'Good evening, $businessName 👋';
-    final logoHeight = (MediaQuery.sizeOf(context).width * 0.28).clamp(
-      96.0,
-      120.0,
+        ? 'Welcome back'
+        : 'Welcome back, $businessName';
+    final logoHeight = (MediaQuery.sizeOf(context).width * 0.24).clamp(
+      82.0,
+      104.0,
     );
 
     return Column(
@@ -150,23 +160,20 @@ class _BrandedHeader extends StatelessWidget {
             fit: BoxFit.contain,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         Text(
           greeting,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: AppColors.white,
-            fontSize: 22,
+            fontSize: 23,
             fontWeight: FontWeight.w900,
             height: 1.12,
           ),
         ),
-        const SizedBox(height: 6),
-        const Text(
-          "Here's what's happening with your hiring today.",
-          style: AppTextStyles.body,
-        ),
+        const SizedBox(height: 4),
+        const Text('Manage your hiring activity', style: AppTextStyles.body),
       ],
     );
   }
@@ -180,9 +187,23 @@ class _PrimaryActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _DashboardCard(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       child: Row(
         children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.coralAccent.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.add_business_rounded,
+              color: AppColors.coralAccent,
+              size: 25,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,45 +212,40 @@ class _PrimaryActionCard extends StatelessWidget {
                   'Need workers soon?',
                   style: TextStyle(
                     color: AppColors.white,
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 4),
                 const Text(
-                  'Post a short-term job and start receiving applications in minutes.',
-                  style: AppTextStyles.body,
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  height: AppSpacing.buttonHeight,
-                  child: ElevatedButton.icon(
-                    onPressed: onTap,
-                    style: AppButtonStyles.primary(
-                      foregroundColor: AppColors.navyBg,
-                    ),
-                    icon: const Icon(Icons.add_rounded, size: 20),
-                    label: Text(
-                      'Create Job Post',
-                      style: AppTextStyles.buttonLabel(),
-                    ),
+                  'Create a short-term job and start receiving applications in minutes.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.lightText,
+                    fontSize: 12.5,
+                    height: 1.25,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 14),
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: AppColors.coralAccent.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.add_business_rounded,
-              color: AppColors.coralAccent,
-              size: 28,
+          const SizedBox(width: 10),
+          SizedBox(
+            height: 42,
+            child: ElevatedButton.icon(
+              onPressed: onTap,
+              style: AppButtonStyles.primary(foregroundColor: AppColors.navyBg)
+                  .copyWith(
+                    padding: const WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(horizontal: 13),
+                    ),
+                  ),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: Text(
+                'Create Job',
+                style: AppTextStyles.buttonLabel(fontSize: 13),
+              ),
             ),
           ),
         ],
@@ -248,7 +264,7 @@ class _HiringSnapshot extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('Hiring Snapshot'),
+        const _SectionTitle('Hiring Overview'),
         const SizedBox(height: 10),
         GridView.count(
           crossAxisCount: 2,
@@ -256,27 +272,31 @@ class _HiringSnapshot extends StatelessWidget {
           mainAxisSpacing: 12,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.32,
+          childAspectRatio: 1.48,
           children: [
             _StatCard(
               label: 'Active Jobs',
               value: stats.activeJobs,
-              icon: Icons.work_history_outlined,
+              icon: Icons.business_center_rounded,
+              accent: AppColors.coralAccent,
             ),
             _StatCard(
               label: 'Pending Applications',
               value: stats.pendingApplications,
-              icon: Icons.assignment_late_outlined,
-            ),
-            _StatCard(
-              label: 'Active Matches',
-              value: stats.activeMatches,
-              icon: Icons.handshake_outlined,
+              icon: Icons.assignment_rounded,
+              accent: Color(0xFFFFB84D),
             ),
             _StatCard(
               label: 'Unread Messages',
               value: stats.unreadMessages,
-              icon: Icons.mark_chat_unread_outlined,
+              icon: Icons.chat_bubble_rounded,
+              accent: Color(0xFF82A8FF),
+            ),
+            _StatCard(
+              label: 'Urgent Jobs',
+              value: stats.urgentJobs,
+              icon: Icons.bolt_rounded,
+              accent: Color(0xFFFF876F),
             ),
           ],
         ),
@@ -290,19 +310,30 @@ class _StatCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
+    required this.accent,
   });
 
   final String label;
   final int value;
   final IconData icon;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
     return _DashboardCard(
+      padding: const EdgeInsets.all(12),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, color: AppColors.coralAccent, size: 24),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.17),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: accent, size: 19),
+          ),
           const Spacer(),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
@@ -311,7 +342,7 @@ class _StatCard extends StatelessWidget {
               key: ValueKey(value),
               style: const TextStyle(
                 color: AppColors.white,
-                fontSize: 28,
+                fontSize: 25,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -321,7 +352,8 @@ class _StatCard extends StatelessWidget {
             label,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.label,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.label.copyWith(fontSize: 11.5),
           ),
         ],
       ),
@@ -386,24 +418,48 @@ class _AttentionItemCard extends StatelessWidget {
     };
   }
 
+  String get subtitle => switch (item.type) {
+    EmployerAttentionType.applications => 'Review and respond to applicants',
+    EmployerAttentionType.messages => 'Reply to your worker conversations',
+    EmployerAttentionType.urgentJobs => 'Manage urgent openings',
+  };
+
+  Color get accent => switch (item.type) {
+    EmployerAttentionType.applications => AppColors.coralAccent,
+    EmployerAttentionType.messages => const Color(0xFF8FA8FF),
+    EmployerAttentionType.urgentJobs => const Color(0xFFFF876F),
+  };
+
   @override
   Widget build(BuildContext context) {
     return _TapCard(
       onTap: onTap,
       child: Row(
         children: [
-          _AccentIcon(icon),
+          _AccentIcon(icon, color: accent),
           const SizedBox(width: 11),
           Expanded(
-            child: Text(
-              item.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.white,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.label.copyWith(fontSize: 12),
+                ),
+              ],
             ),
           ),
           const Icon(Icons.chevron_right_rounded, color: AppColors.lightText),
@@ -452,28 +508,41 @@ class _PositiveAttentionCard extends StatelessWidget {
 class _RecentApplicationsSection extends StatelessWidget {
   const _RecentApplicationsSection({
     required this.applications,
-    required this.onTap,
+    required this.onViewAll,
+    required this.onOpen,
   });
-
   final List<EmployerRecentApplication> applications;
-  final VoidCallback onTap;
+  final VoidCallback onViewAll;
+  final ValueChanged<EmployerRecentApplication> onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return _PreviewSection(
+    return _HorizontalDashboardSection(
       title: 'Recent Applications',
+      onViewAll: onViewAll,
       emptyText: 'No applications yet.',
       isEmpty: applications.isEmpty,
-      children: applications.map((application) {
-        return _ApplicationRow(application: application, onTap: onTap);
-      }).toList(),
+      height: 150,
+      itemCount: applications.length,
+      itemBuilder: (context, index) {
+        final application = applications[index];
+        return SizedBox(
+          width: 178,
+          child: _RecentApplicationCard(
+            application: application,
+            onTap: () => onOpen(application),
+          ),
+        );
+      },
     );
   }
 }
 
-class _ApplicationRow extends StatelessWidget {
-  const _ApplicationRow({required this.application, required this.onTap});
-
+class _RecentApplicationCard extends StatelessWidget {
+  const _RecentApplicationCard({
+    required this.application,
+    required this.onTap,
+  });
   final EmployerRecentApplication application;
   final VoidCallback onTap;
 
@@ -481,44 +550,49 @@ class _ApplicationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return _TapCard(
       onTap: onTap,
-      child: Row(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _EmployeeAvatar(
-            imageUrl: application.employeeImageUrl,
-            name: application.employeeName,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            children: [
+              _EmployeeAvatar(
+                imageUrl: application.employeeImageUrl,
+                name: application.employeeName,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
                   application.employeeName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppColors.white,
-                    fontSize: 15.5,
+                    fontSize: 15,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  application.jobTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.label,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  _relativeTime(application.createdAt),
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          _StatusBadge(status: application.status),
+          const SizedBox(height: 9),
+          Text(
+            application.jobTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.label,
+          ),
+          const Spacer(),
+          Row(
+            children: [
+              _StatusBadge(status: application.status),
+              const Spacer(),
+              Text(
+                _relativeTime(application.createdAt),
+                style: const TextStyle(color: Colors.white54, fontSize: 11.5),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -526,25 +600,37 @@ class _ApplicationRow extends StatelessWidget {
 }
 
 class _ActiveJobsSection extends StatelessWidget {
-  const _ActiveJobsSection({required this.jobs, required this.onTap});
-
+  const _ActiveJobsSection({
+    required this.jobs,
+    required this.onViewAll,
+    required this.onOpen,
+  });
   final List<EmployerActiveJob> jobs;
-  final VoidCallback onTap;
+  final VoidCallback onViewAll;
+  final ValueChanged<EmployerActiveJob> onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return _PreviewSection(
+    return _HorizontalDashboardSection(
       title: 'Active Jobs',
+      onViewAll: onViewAll,
       emptyText: 'You have no active job posts.',
       isEmpty: jobs.isEmpty,
-      children: jobs.map((job) => _JobRow(job: job, onTap: onTap)).toList(),
+      height: 154,
+      itemCount: jobs.length,
+      itemBuilder: (context, index) {
+        final job = jobs[index];
+        return SizedBox(
+          width: 230,
+          child: _ActiveJobCard(job: job, onTap: () => onOpen(job)),
+        );
+      },
     );
   }
 }
 
-class _JobRow extends StatelessWidget {
-  const _JobRow({required this.job, required this.onTap});
-
+class _ActiveJobCard extends StatelessWidget {
+  const _ActiveJobCard({required this.job, required this.onTap});
   final EmployerActiveJob job;
   final VoidCallback onTap;
 
@@ -552,9 +638,10 @@ class _JobRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return _TapCard(
       onTap: onTap,
+      padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          _AccentIcon(job.urgent ? Icons.bolt_rounded : Icons.work_rounded),
+          _JobImage(job: job),
           const SizedBox(width: 11),
           Expanded(
             child: Column(
@@ -565,7 +652,7 @@ class _JobRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         job.title,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AppColors.white,
@@ -577,17 +664,25 @@ class _JobRow extends StatelessWidget {
                     if (job.urgent) const _UrgentBadge(),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                   _jobSchedule(job),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.label,
+                  style: AppTextStyles.label.copyWith(fontSize: 12),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
                 Text(
                   '${job.applicationsCount} applications',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: const TextStyle(color: Colors.white54, fontSize: 11.5),
+                ),
+                const Spacer(),
+                const Row(
+                  children: [
+                    Icon(Icons.circle, color: Color(0xFF35D879), size: 10),
+                    SizedBox(width: 6),
+                    Text('Active', style: AppTextStyles.label),
+                  ],
                 ),
               ],
             ),
@@ -598,36 +693,86 @@ class _JobRow extends StatelessWidget {
   }
 }
 
-class _PreviewSection extends StatelessWidget {
-  const _PreviewSection({
+class _JobImage extends StatelessWidget {
+  const _JobImage({required this.job});
+  final EmployerActiveJob job;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 54,
+      height: double.infinity,
+      constraints: const BoxConstraints(maxHeight: 104),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.navyBg.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: job.imageUrl == null
+          ? Icon(
+              job.urgent ? Icons.bolt_rounded : Icons.work_outline_rounded,
+              color: AppColors.coralAccent,
+              size: 25,
+            )
+          : Image.network(
+              job.imageUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Icon(
+                Icons.work_outline_rounded,
+                color: AppColors.coralAccent,
+              ),
+            ),
+    );
+  }
+}
+
+class _HorizontalDashboardSection extends StatelessWidget {
+  const _HorizontalDashboardSection({
     required this.title,
+    required this.onViewAll,
     required this.emptyText,
     required this.isEmpty,
-    required this.children,
+    required this.height,
+    required this.itemCount,
+    required this.itemBuilder,
   });
-
   final String title;
+  final VoidCallback onViewAll;
   final String emptyText;
   final bool isEmpty;
-  final List<Widget> children;
+  final double height;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionTitle(title),
-        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(child: _SectionTitle(title)),
+            TextButton(
+              onPressed: onViewAll,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.coralAccent,
+                visualDensity: VisualDensity.compact,
+              ),
+              child: const Text('View all'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         if (isEmpty)
           _DashboardCard(child: Text(emptyText, style: AppTextStyles.body))
         else
-          Column(
-            children: [
-              for (final child in children) ...[
-                child,
-                if (child != children.last) const SizedBox(height: 8),
-              ],
-            ],
+          SizedBox(
+            height: height,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: itemCount,
+              itemBuilder: itemBuilder,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+            ),
           ),
       ],
     );
@@ -771,10 +916,15 @@ class _AnimatedSection extends StatelessWidget {
 }
 
 class _TapCard extends StatelessWidget {
-  const _TapCard({required this.onTap, required this.child});
+  const _TapCard({
+    required this.onTap,
+    required this.child,
+    this.padding = const EdgeInsets.all(12),
+  });
 
   final VoidCallback onTap;
   final Widget child;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
@@ -784,7 +934,7 @@ class _TapCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Ink(
-          padding: const EdgeInsets.all(16),
+          padding: padding,
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(20),
@@ -842,9 +992,10 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _AccentIcon extends StatelessWidget {
-  const _AccentIcon(this.icon);
+  const _AccentIcon(this.icon, {this.color = AppColors.coralAccent});
 
   final IconData icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -852,10 +1003,10 @@ class _AccentIcon extends StatelessWidget {
       width: 38,
       height: 38,
       decoration: BoxDecoration(
-        color: AppColors.coralAccent.withValues(alpha: 0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Icon(icon, color: AppColors.coralAccent, size: 20),
+      child: Icon(icon, color: color, size: 20),
     );
   }
 }

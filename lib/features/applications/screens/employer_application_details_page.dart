@@ -290,14 +290,6 @@ class _CandidateHero extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     _MetaText(
-                      icon: Icons.location_on_outlined,
-                      text:
-                          candidate.city ??
-                          candidate.locationLabel ??
-                          'Location not set',
-                      maxWidth: metaMaxWidth,
-                    ),
-                    _MetaText(
                       icon: Icons.schedule_rounded,
                       text: _relativeTime(item.createdAt),
                       maxWidth: metaMaxWidth,
@@ -344,11 +336,6 @@ class _SummaryCard extends StatelessWidget {
         value: candidate.ageRange ?? 'Not set',
       ),
       _FactItem(
-        icon: Icons.location_on_outlined,
-        label: 'Location',
-        value: candidate.city ?? candidate.locationLabel ?? 'Not set',
-      ),
-      _FactItem(
         icon: Icons.calendar_month_rounded,
         label: 'Availability',
         value: candidate.availabilityLabel,
@@ -357,6 +344,13 @@ class _SummaryCard extends StatelessWidget {
         icon: Icons.work_outline_rounded,
         label: 'Experience',
         value: candidate.experienceLabel,
+      ),
+      _FactItem(
+        icon: Icons.psychology_outlined,
+        label: 'Skills',
+        value: candidate.skills.isEmpty
+            ? 'Not specified'
+            : '${candidate.skills.length} listed',
       ),
     ];
     return _Card(
@@ -768,7 +762,7 @@ class _FactTile extends StatelessWidget {
               const SizedBox(height: 5),
               Text(
                 item.value,
-                maxLines: item.label == 'Location' ? 2 : 1,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppColors.white,

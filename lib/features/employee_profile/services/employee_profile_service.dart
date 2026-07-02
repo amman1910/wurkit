@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../shared/services/google_places_service.dart';
+
 class EmployeeAccountDeletionException implements Exception {
   const EmployeeAccountDeletionException(this.message, {this.code});
 
@@ -22,6 +24,7 @@ class EmployeeProfileService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final GooglePlacesService _googlePlacesService = GooglePlacesService();
 
   Future<void> saveBasicInfo({
     required String name,
@@ -174,6 +177,11 @@ class EmployeeProfileService {
     // Add location coordinates if available
     if (latitude != null && longitude != null) {
       updateData['location'] = {'lat': latitude, 'lng': longitude};
+      updateData['locationName'] =
+          await _reverseGeocodeLocality(latitude, longitude) ??
+          FieldValue.delete();
+    } else if (!locationPermissionGranted) {
+      updateData['locationName'] = FieldValue.delete();
     }
 
     // Save to employeeProfiles/{uid}
@@ -261,6 +269,11 @@ class EmployeeProfileService {
     // Add location coordinates if available
     if (latitude != null && longitude != null) {
       updateData['location'] = {'lat': latitude, 'lng': longitude};
+      updateData['locationName'] =
+          await _reverseGeocodeLocality(latitude, longitude) ??
+          FieldValue.delete();
+    } else if (!locationPermissionGranted) {
+      updateData['locationName'] = FieldValue.delete();
     }
 
     // Save to employeeProfiles/{uid}
@@ -310,6 +323,20 @@ class EmployeeProfileService {
       'onboardingStep': 'completed',
       'updatedAt': now,
     }, SetOptions(merge: true));
+  }
+
+  Future<String?> _reverseGeocodeLocality(
+    double latitude,
+    double longitude,
+  ) async {
+    try {
+      return await _googlePlacesService.reverseGeocodeLocality(
+        latitude: latitude,
+        longitude: longitude,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Streams the current authenticated employee profile from Firestore.
@@ -367,8 +394,22 @@ class EmployeeProfileService {
     }
 
     final uid = user.uid;
+    final updateData = <String, dynamic>{...data};
+    final location = updateData['location'];
+    if (!updateData.containsKey('locationName') && location is Map) {
+      final latitude = location['lat'];
+      final longitude = location['lng'];
+      if (latitude is num && longitude is num) {
+        updateData['locationName'] =
+            await _reverseGeocodeLocality(
+              latitude.toDouble(),
+              longitude.toDouble(),
+            ) ??
+            FieldValue.delete();
+      }
+    }
     await _firestore.collection('employeeProfiles').doc(uid).set({
-      ...data,
+      ...updateData,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }

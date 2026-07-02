@@ -598,7 +598,7 @@ class _ApplicationCard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 350;
-        final photoSize = compact ? 108.0 : 116.0;
+        final photoSize = compact ? 124.0 : 136.0;
         final thumbnailWidth = compact ? 72.0 : 82.0;
         final thumbnailHeight = compact ? 56.0 : 62.0;
 
@@ -679,11 +679,12 @@ class _ApplicationCard extends StatelessWidget {
                             runSpacing: 5,
                             children: [
                               _MetaText(
-                                icon: Icons.location_on_outlined,
-                                text:
-                                    candidate.city ??
-                                    candidate.locationLabel ??
-                                    'Location not set',
+                                icon: Icons.calendar_month_outlined,
+                                text: candidate.availabilityLabel,
+                              ),
+                              _MetaText(
+                                icon: Icons.work_outline_rounded,
+                                text: candidate.experienceLabel,
                               ),
                               _MetaText(
                                 icon: Icons.schedule_rounded,

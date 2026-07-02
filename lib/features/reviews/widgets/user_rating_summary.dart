@@ -5,9 +5,14 @@ import '../models/review.dart';
 import '../services/review_service.dart';
 
 class UserRatingSummary extends StatelessWidget {
-  const UserRatingSummary({super.key, required this.userId});
+  const UserRatingSummary({
+    super.key,
+    required this.userId,
+    this.compact = false,
+  });
 
   final String userId;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -18,6 +23,7 @@ class UserRatingSummary extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _SummaryShell(
+            compact: compact,
             child: Row(
               children: [
                 const SizedBox(
@@ -37,6 +43,7 @@ class UserRatingSummary extends StatelessWidget {
 
         if (snapshot.hasError) {
           return _SummaryShell(
+            compact: compact,
             child: Text(
               'Could not load reviews',
               style: AppTextStyles.body.copyWith(color: Colors.red.shade200),
@@ -46,7 +53,8 @@ class UserRatingSummary extends StatelessWidget {
 
         final reviews = snapshot.data ?? const [];
         if (reviews.isEmpty) {
-          return const _SummaryShell(
+          return _SummaryShell(
+            compact: compact,
             child: Text(
               'No reviews yet',
               style: TextStyle(
@@ -65,6 +73,7 @@ class UserRatingSummary extends StatelessWidget {
         final reviewCount = reviews.length;
 
         return _SummaryShell(
+          compact: compact,
           child: Row(
             children: [
               const Icon(Icons.star_rounded, color: AppColors.coralAccent),
@@ -86,15 +95,16 @@ class UserRatingSummary extends StatelessWidget {
 }
 
 class _SummaryShell extends StatelessWidget {
-  const _SummaryShell({required this.child});
+  const _SummaryShell({required this.child, this.compact = false});
 
   final Widget child;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(compact ? 11 : 16),
       decoration: BoxDecoration(
         color: AppColors.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(18),

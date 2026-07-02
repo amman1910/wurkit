@@ -10,10 +10,12 @@ class EmployeeWorkPreferencesPage extends StatefulWidget {
   const EmployeeWorkPreferencesPage({super.key, this.isEditing = false});
 
   @override
-  State<EmployeeWorkPreferencesPage> createState() => _EmployeeWorkPreferencesPageState();
+  State<EmployeeWorkPreferencesPage> createState() =>
+      _EmployeeWorkPreferencesPageState();
 }
 
-class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPage>
+class _EmployeeWorkPreferencesPageState
+    extends State<EmployeeWorkPreferencesPage>
     with SingleTickerProviderStateMixin {
   final EmployeeProfileService _profileService = EmployeeProfileService();
 
@@ -199,11 +201,7 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
       'Social Media Assistant',
       'Photo Upload Assistant',
     ],
-    'Other': [
-      'General Helper',
-      'Flexible Worker',
-      'Short-notice Helper',
-    ],
+    'Other': ['General Helper', 'Flexible Worker', 'Short-notice Helper'],
   };
 
   static const Map<String, IconData> categoryIcons = {
@@ -432,10 +430,7 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
       const Interval(0.85, 1.0, curve: Curves.easeOutCubic),
     ];
     return Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: intervals[index],
-      ),
+      CurvedAnimation(parent: _animationController, curve: intervals[index]),
     );
   }
 
@@ -448,40 +443,24 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
         final categories = _readStringList(profile, 'jobCategories');
         final roles = _readStringList(profile, 'preferredRoles');
         final savedSkills = _readStringList(profile, 'skills');
-        final knownRoles = rolesByCategory.values.expand((items) => items).toSet();
-
-        selectedCategories = categories.where(rolesByCategory.containsKey).toList();
-        final customCategories = categories.where((item) => !rolesByCategory.containsKey(item)).toList();
-        if (customCategories.isNotEmpty) {
-          isOtherCategorySelected = true;
-          customCategoryController.text = customCategories.first;
-        }
-
-        selectedRoles = roles.where(knownRoles.contains).toList();
-        final customRoles = roles.where((item) => !knownRoles.contains(item)).toList();
-        if (customRoles.isNotEmpty) {
-          isOtherRoleSelected = true;
-          customRoleController.text = customRoles.first;
-        }
-
-        selectedSkills = savedSkills.where(availableSkills.contains).toList();
-        final customSkills = savedSkills.where((item) => !availableSkills.contains(item)).toList();
-        if (customSkills.isNotEmpty) {
-          isOtherSkillSelected = true;
-          customSkillController.text = customSkills.first;
-        }
+        selectedCategories = _withoutOther(categories);
+        selectedRoles = _withoutOther(roles);
+        selectedSkills = _withoutOther(savedSkills);
 
         final savedExperienceLevel = _readString(profile, 'experienceLevel');
         if (experienceLevels.contains(savedExperienceLevel)) {
           experienceLevel = savedExperienceLevel;
         }
 
-        salary = _readDouble(profile, 'salaryExpectation', salary)
-            .clamp(30, 80)
-            .toDouble();
-        selectedJobTypes = _readStringList(profile, 'preferredJobTypes')
-            .where(jobTypes.contains)
-            .toList();
+        salary = _readDouble(
+          profile,
+          'salaryExpectation',
+          salary,
+        ).clamp(30, 80).toDouble();
+        selectedJobTypes = _readStringList(
+          profile,
+          'preferredJobTypes',
+        ).where(jobTypes.contains).toList();
       }
     } catch (_) {
       if (mounted) {
@@ -497,7 +476,10 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
   List<String> _readStringList(Map<String, dynamic> data, String key) {
     final value = data[key];
     if (value is List) {
-      return value.map((item) => item.toString()).where((item) => item.isNotEmpty).toList();
+      return value
+          .map((item) => item.toString())
+          .where((item) => item.isNotEmpty)
+          .toList();
     }
     return const [];
   }
@@ -514,12 +496,80 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
     return fallback;
   }
 
+  List<String> _withoutOther(List<String> values) {
+    return values
+        .where((value) => value.trim().toLowerCase() != 'other')
+        .toList();
+  }
+
+  bool _containsIgnoreCase(List<String> values, String candidate) {
+    final normalized = candidate.trim().toLowerCase();
+    return values.any((value) => value.trim().toLowerCase() == normalized);
+  }
+
+  void _commitCustomCategory() {
+    _commitCustomValue(
+      controller: customCategoryController,
+      selectedValues: selectedCategories,
+      knownValues: rolesByCategory.keys,
+      closeInput: () => isOtherCategorySelected = false,
+    );
+  }
+
+  void _commitCustomRole() {
+    _commitCustomValue(
+      controller: customRoleController,
+      selectedValues: selectedRoles,
+      knownValues: rolesByCategory.values.expand((roles) => roles),
+      closeInput: () => isOtherRoleSelected = false,
+    );
+  }
+
+  void _commitCustomSkill() {
+    _commitCustomValue(
+      controller: customSkillController,
+      selectedValues: selectedSkills,
+      knownValues: availableSkills,
+      closeInput: () => isOtherSkillSelected = false,
+    );
+  }
+
+  void _commitCustomValue({
+    required TextEditingController controller,
+    required List<String> selectedValues,
+    required Iterable<String> knownValues,
+    required VoidCallback closeInput,
+  }) {
+    final typedValue = controller.text.trim();
+    if (typedValue.isEmpty) return;
+    final canonicalValue = knownValues.cast<String>().firstWhere(
+      (value) => value.toLowerCase() == typedValue.toLowerCase(),
+      orElse: () => typedValue,
+    );
+    setState(() {
+      if (!_containsIgnoreCase(selectedValues, canonicalValue)) {
+        selectedValues.add(canonicalValue);
+      }
+      controller.clear();
+      closeInput();
+    });
+  }
+
+  FilterChip _customChip(String value, List<String> selectedValues) {
+    return FilterChip(
+      label: Text(value),
+      selected: true,
+      onSelected: (_) => setState(() => selectedValues.remove(value)),
+      backgroundColor: AppColors.surface,
+      selectedColor: AppColors.coralAccent,
+      checkmarkColor: AppColors.navyBg,
+      labelStyle: const TextStyle(color: AppColors.navyBg),
+    );
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red.shade600,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red.shade600),
     );
   }
 
@@ -527,29 +577,10 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
     setState(() => isLoading = true);
 
     try {
-      // Prepare final lists with custom values
-      List<String> finalCategories = selectedCategories.toList();
-      if (isOtherCategorySelected && customCategoryController.text.trim().isNotEmpty) {
-        String custom = customCategoryController.text.trim();
-        if (!finalCategories.contains(custom)) finalCategories.add(custom);
-      }
-
-      List<String> finalRoles = selectedRoles.toList();
-      if (isOtherRoleSelected && customRoleController.text.trim().isNotEmpty) {
-        String custom = customRoleController.text.trim();
-        if (!finalRoles.contains(custom)) finalRoles.add(custom);
-      }
-
-      List<String> finalSkills = selectedSkills.toList();
-      if (isOtherSkillSelected && customSkillController.text.trim().isNotEmpty) {
-        String custom = customSkillController.text.trim();
-        if (!finalSkills.contains(custom)) finalSkills.add(custom);
-      }
-
       await _profileService.saveWorkPreferences(
-        jobCategories: finalCategories,
-        preferredRoles: finalRoles,
-        skills: finalSkills,
+        jobCategories: selectedCategories,
+        preferredRoles: selectedRoles,
+        skills: selectedSkills,
         experienceLevel: experienceLevel,
         salaryExpectation: salary,
         preferredJobTypes: selectedJobTypes,
@@ -672,37 +703,51 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            ...rolesByCategory.keys.map((category) => FilterChip(
-                              label: Text(category),
-                              selected: selectedCategories.contains(category),
-                              avatar: Icon(
-                                categoryIcons[category] ?? Icons.work_outline_rounded,
-                                size: 18,
-                                color: selectedCategories.contains(category)
-                                    ? AppColors.navyBg
-                                    : AppColors.coralAccent,
+                            ...rolesByCategory.keys.map(
+                              (category) => FilterChip(
+                                label: Text(category),
+                                selected: selectedCategories.contains(category),
+                                avatar: Icon(
+                                  categoryIcons[category] ??
+                                      Icons.work_outline_rounded,
+                                  size: 18,
+                                  color: selectedCategories.contains(category)
+                                      ? AppColors.navyBg
+                                      : AppColors.coralAccent,
+                                ),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      selectedCategories.add(category);
+                                    } else {
+                                      selectedCategories.remove(category);
+                                      // Remove roles from unselected categories
+                                      final categoryRoles =
+                                          rolesByCategory[category] ?? [];
+                                      selectedRoles.removeWhere(
+                                        (role) => categoryRoles.contains(role),
+                                      );
+                                    }
+                                  });
+                                },
+                                backgroundColor: AppColors.surface,
+                                selectedColor: AppColors.coralAccent,
+                                checkmarkColor: AppColors.navyBg,
+                                labelStyle: TextStyle(
+                                  color: selectedCategories.contains(category)
+                                      ? AppColors.navyBg
+                                      : AppColors.white,
+                                ),
                               ),
-                              onSelected: (selected) {
-                                setState(() {
-                                  if (selected) {
-                                    selectedCategories.add(category);
-                                  } else {
-                                    selectedCategories.remove(category);
-                                    // Remove roles from unselected categories
-                                    final categoryRoles = rolesByCategory[category] ?? [];
-                                    selectedRoles.removeWhere((role) => categoryRoles.contains(role));
-                                  }
-                                });
-                              },
-                              backgroundColor: AppColors.surface,
-                              selectedColor: AppColors.coralAccent,
-                              checkmarkColor: AppColors.navyBg,
-                              labelStyle: TextStyle(
-                                color: selectedCategories.contains(category)
-                                    ? AppColors.navyBg
-                                    : AppColors.white,
-                              ),
-                            )),
+                            ),
+                            ...selectedCategories
+                                .where(
+                                  (item) => !rolesByCategory.containsKey(item),
+                                )
+                                .map(
+                                  (item) =>
+                                      _customChip(item, selectedCategories),
+                                ),
                             FilterChip(
                               label: const Text('Other'),
                               selected: isOtherCategorySelected,
@@ -750,8 +795,15 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                                 border: InputBorder.none,
                                 hintText: 'Enter another category',
                                 hintStyle: AppTextStyles.hint,
+                                suffixIcon: IconButton(
+                                  onPressed: _commitCustomCategory,
+                                  icon: const Icon(Icons.add_circle_rounded),
+                                  color: AppColors.coralAccent,
+                                ),
                               ),
                               style: AppTextStyles.input,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _commitCustomCategory(),
                             ),
                           ),
                         ],
@@ -774,7 +826,8 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                     ).animate(_animations[4]),
                     child: _buildSection(
                       title: 'Preferred Roles',
-                      subtitle: 'Choose specific positions you\'re interested in',
+                      subtitle:
+                          'Choose specific positions you\'re interested in',
                       child: Column(
                         children: [
                           Wrap(
@@ -782,36 +835,51 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                             runSpacing: 8,
                             children: [
                               ...selectedCategories
-                                  .expand((category) => rolesByCategory[category] ?? [])
+                                  .expand(
+                                    (category) =>
+                                        rolesByCategory[category] ?? [],
+                                  )
                                   .toSet()
-                                  .map((role) => FilterChip(
-                                label: Text(role),
-                                selected: selectedRoles.contains(role),
-                                avatar: Icon(
-                                  roleIcons[role] ?? Icons.work_outline_rounded,
-                                  size: 16,
-                                  color: selectedRoles.contains(role)
-                                      ? AppColors.navyBg
-                                      : AppColors.coralAccent,
-                                ),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      selectedRoles.add(role);
-                                    } else {
-                                      selectedRoles.remove(role);
-                                    }
-                                  });
-                                },
-                                backgroundColor: AppColors.surface,
-                                selectedColor: AppColors.coralAccent,
-                                checkmarkColor: AppColors.navyBg,
-                                labelStyle: TextStyle(
-                                  color: selectedRoles.contains(role)
-                                      ? AppColors.navyBg
-                                      : AppColors.white,
-                                ),
-                              )),
+                                  .map(
+                                    (role) => FilterChip(
+                                      label: Text(role),
+                                      selected: selectedRoles.contains(role),
+                                      avatar: Icon(
+                                        roleIcons[role] ??
+                                            Icons.work_outline_rounded,
+                                        size: 16,
+                                        color: selectedRoles.contains(role)
+                                            ? AppColors.navyBg
+                                            : AppColors.coralAccent,
+                                      ),
+                                      onSelected: (selected) {
+                                        setState(() {
+                                          if (selected) {
+                                            selectedRoles.add(role);
+                                          } else {
+                                            selectedRoles.remove(role);
+                                          }
+                                        });
+                                      },
+                                      backgroundColor: AppColors.surface,
+                                      selectedColor: AppColors.coralAccent,
+                                      checkmarkColor: AppColors.navyBg,
+                                      labelStyle: TextStyle(
+                                        color: selectedRoles.contains(role)
+                                            ? AppColors.navyBg
+                                            : AppColors.white,
+                                      ),
+                                    ),
+                                  ),
+                              ...selectedRoles
+                                  .where(
+                                    (item) => !rolesByCategory.values
+                                        .expand((roles) => roles)
+                                        .contains(item),
+                                  )
+                                  .map(
+                                    (item) => _customChip(item, selectedRoles),
+                                  ),
                               FilterChip(
                                 label: const Text('Other'),
                                 selected: isOtherRoleSelected,
@@ -852,15 +920,24 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                                   width: 1,
                                 ),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               child: TextFormField(
                                 controller: customRoleController,
                                 decoration: InputDecoration(
                                   border: InputBorder.none,
                                   hintText: 'Enter another role',
                                   hintStyle: AppTextStyles.hint,
+                                  suffixIcon: IconButton(
+                                    onPressed: _commitCustomRole,
+                                    icon: const Icon(Icons.add_circle_rounded),
+                                    color: AppColors.coralAccent,
+                                  ),
                                 ),
                                 style: AppTextStyles.input,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _commitCustomRole(),
                               ),
                             ),
                           ],
@@ -870,7 +947,8 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                   ),
                 ),
 
-              if (selectedCategories.isNotEmpty || isOtherCategorySelected) const SizedBox(height: 24),
+              if (selectedCategories.isNotEmpty || isOtherCategorySelected)
+                const SizedBox(height: 24),
 
               // Skills
               FadeTransition(
@@ -889,27 +967,36 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            ...availableSkills.map((skill) => FilterChip(
-                              label: Text(skill),
-                              selected: selectedSkills.contains(skill),
-                              onSelected: (selected) {
-                                setState(() {
-                                  if (selected) {
-                                    selectedSkills.add(skill);
-                                  } else {
-                                    selectedSkills.remove(skill);
-                                  }
-                                });
-                              },
-                              backgroundColor: AppColors.surface,
-                              selectedColor: AppColors.coralAccent,
-                              checkmarkColor: AppColors.navyBg,
-                              labelStyle: TextStyle(
-                                color: selectedSkills.contains(skill)
-                                    ? AppColors.navyBg
-                                    : AppColors.white,
+                            ...availableSkills.map(
+                              (skill) => FilterChip(
+                                label: Text(skill),
+                                selected: selectedSkills.contains(skill),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      selectedSkills.add(skill);
+                                    } else {
+                                      selectedSkills.remove(skill);
+                                    }
+                                  });
+                                },
+                                backgroundColor: AppColors.surface,
+                                selectedColor: AppColors.coralAccent,
+                                checkmarkColor: AppColors.navyBg,
+                                labelStyle: TextStyle(
+                                  color: selectedSkills.contains(skill)
+                                      ? AppColors.navyBg
+                                      : AppColors.white,
+                                ),
                               ),
-                            )),
+                            ),
+                            ...selectedSkills
+                                .where(
+                                  (item) => !availableSkills.contains(item),
+                                )
+                                .map(
+                                  (item) => _customChip(item, selectedSkills),
+                                ),
                             FilterChip(
                               label: const Text('Other'),
                               selected: isOtherSkillSelected,
@@ -950,8 +1037,15 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                                 border: InputBorder.none,
                                 hintText: 'Enter another skill',
                                 hintStyle: AppTextStyles.hint,
+                                suffixIcon: IconButton(
+                                  onPressed: _commitCustomSkill,
+                                  icon: const Icon(Icons.add_circle_rounded),
+                                  color: AppColors.coralAccent,
+                                ),
                               ),
                               style: AppTextStyles.input,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _commitCustomSkill(),
                             ),
                           ),
                         ],
@@ -1029,7 +1123,7 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                     child: Column(
                       children: [
                         Text(
-                          '\$${salary.toStringAsFixed(0)}/hour',
+                          '₪${salary.toStringAsFixed(0)}/hour',
                           style: GoogleFonts.nunito(
                             color: AppColors.white,
                             fontSize: 24,
@@ -1117,7 +1211,9 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                       onPressed: !isBusy ? _handleContinue : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navyBg,
-                        disabledBackgroundColor: AppColors.navyBg.withOpacity(0.45),
+                        disabledBackgroundColor: AppColors.navyBg.withOpacity(
+                          0.45,
+                        ),
                         shape: const StadiumBorder(),
                       ),
                       child: isBusy
@@ -1126,7 +1222,9 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                             )
                           : Text(
                               widget.isEditing ? 'Save changes' : 'Continue',
-                              style: AppTextStyles.buttonLabel(color: AppColors.coralAccent),
+                              style: AppTextStyles.buttonLabel(
+                                color: AppColors.coralAccent,
+                              ),
                             ),
                     ),
                   ),
@@ -1148,12 +1246,12 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
                     height: 48,
                     child: TextButton(
                       onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        shape: const StadiumBorder(),
-                      ),
+                      style: TextButton.styleFrom(shape: const StadiumBorder()),
                       child: Text(
                         'Back',
-                        style: AppTextStyles.buttonLabel(color: AppColors.navyBg),
+                        style: AppTextStyles.buttonLabel(
+                          color: AppColors.navyBg,
+                        ),
                       ),
                     ),
                   ),
@@ -1179,10 +1277,7 @@ class _EmployeeWorkPreferencesPageState extends State<EmployeeWorkPreferencesPag
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

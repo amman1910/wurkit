@@ -115,3 +115,6 @@ skills-lock.json
 .buildlog/
 .swiftpm/
 migrate_working_dir/
+
+# Firebase Admin SDK
+scripts/firebase-admin-secret.json
