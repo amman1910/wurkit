@@ -28,7 +28,7 @@ class _JobFilters {
     this.shiftFilter = _ShiftFilter.any,
     this.customShiftStart,
     this.customShiftEnd,
-    this.radiusKm = 0,
+    this.radiusKm = -1,
   });
 
   final RangeValues salaryRange;
@@ -43,7 +43,7 @@ class _JobFilters {
   bool get hasSalaryFilter => salaryRange.start > 20 || salaryRange.end < 100;
   bool get hasDateFilter => dateFilter != _DateFilter.any;
   bool get hasShiftFilter => shiftFilter != _ShiftFilter.any;
-  bool get hasRadiusFilter => radiusKm > 0;
+  bool get hasRadiusFilter => radiusKm >= 0;
   bool get hasActiveFilters =>
       hasSalaryFilter || hasDateFilter || hasShiftFilter || hasRadiusFilter;
 
@@ -1342,6 +1342,11 @@ class _JobFilterSheet extends StatefulWidget {
 class _JobFilterSheetState extends State<_JobFilterSheet> {
   late _JobFilters _draft = widget.filters;
 
+  bool get _anyDistance => _draft.radiusKm < 0;
+
+  double get _selectedDistanceKm =>
+      _anyDistance ? 500 : _draft.radiusKm.clamp(0, 500).toDouble();
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -1392,17 +1397,112 @@ class _JobFilterSheetState extends State<_JobFilterSheet> {
               ),
               const SizedBox(height: 8),
               const _SheetSectionTitle('Distance'),
-              _ChipWrap<int>(
-                items: const [
-                  (0, 'Any distance'),
-                  (5, '5 km'),
-                  (10, '10 km'),
-                  (25, '25 km'),
-                  (50, '50 km'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Maximum distance',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(scale: animation, child: child),
+                    ),
+                    child: Text(
+                      _anyDistance
+                          ? 'Any distance'
+                          : '${_selectedDistanceKm.round()} km',
+                      key: ValueKey<String>(
+                        _anyDistance
+                            ? 'any-distance'
+                            : 'distance-${_selectedDistanceKm.round()}',
+                      ),
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
                 ],
-                selected: _draft.radiusKm,
-                onSelected: (value) =>
-                    setState(() => _draft = _draft.copyWith(radiusKm: value)),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ChoiceChip(
+                  label: const Text('Any distance'),
+                  selected: _anyDistance,
+                  selectedColor: const Color(0xFF8D73D9),
+                  backgroundColor: AppColors.surface,
+                  labelStyle: TextStyle(
+                    color: _anyDistance ? AppColors.white : AppColors.lightText,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  side: BorderSide(
+                    color: _anyDistance
+                        ? const Color(0xFF8D73D9)
+                        : AppColors.border,
+                  ),
+                  onSelected: (selected) {
+                    if (!selected) return;
+                    setState(() {
+                      _draft = _draft.copyWith(radiusKm: -1);
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 5,
+                  activeTrackColor: const Color(0xFF8D73D9),
+                  inactiveTrackColor: AppColors.surface,
+                  thumbColor: const Color(0xFF8D73D9),
+                  overlayColor: const Color(0xFF8D73D9).withValues(alpha: 0.18),
+                  valueIndicatorColor: const Color(0xFF8D73D9),
+                  valueIndicatorTextStyle: const TextStyle(
+                    color: AppColors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  trackShape: const RoundedRectSliderTrackShape(),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 10,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 20,
+                  ),
+                ),
+                child: Slider(
+                  value: _selectedDistanceKm,
+                  min: 0,
+                  max: 500,
+                  divisions: 500,
+                  label: '${_selectedDistanceKm.round()} km',
+                  onChanged: (value) {
+                    setState(() {
+                      _draft = _draft.copyWith(radiusKm: value.round());
+                    });
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('0 km', style: AppTextStyles.label),
+                    Text('500 km', style: AppTextStyles.label),
+                  ],
+                ),
               ),
               const SizedBox(height: 18),
               _SheetLabel(
