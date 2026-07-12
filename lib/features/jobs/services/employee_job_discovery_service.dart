@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../matching/services/ai_job_ranking_service.dart';
+import '../../matching/services/job_matching_service.dart';
 import '../../notifications/services/notification_service.dart';
 import '../models/employee_job_discovery_item.dart';
 
@@ -9,13 +11,19 @@ class EmployeeJobDiscoveryService {
     FirebaseAuth? firebaseAuth,
     FirebaseFirestore? firestore,
     NotificationService? notificationService,
+    JobMatchingService? matchingService,
+    AiJobRankingService? aiRankingService,
   }) : _auth = firebaseAuth ?? FirebaseAuth.instance,
        _firestore = firestore ?? FirebaseFirestore.instance,
-       _notificationService = notificationService ?? NotificationService();
+       _notificationService = notificationService ?? NotificationService(),
+       _matchingService = matchingService ?? const JobMatchingService(),
+       _aiRankingService = aiRankingService ?? AiJobRankingService();
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
   final NotificationService _notificationService;
+  final JobMatchingService _matchingService;
+  final AiJobRankingService _aiRankingService;
 
   Future<({double latitude, double longitude})?> loadEmployeeLocation() async {
     final user = _auth.currentUser;
@@ -43,6 +51,7 @@ class EmployeeJobDiscoveryService {
         .where('status', isEqualTo: 'open')
         .get();
 
+    final employeeProfileFuture = _loadEmployeeProfile(user.uid);
     final appliedIdsFuture = _loadAppliedJobIds(user.uid);
     final dismissedIdsFuture = _loadNotInterestedJobIds(user.uid);
     final employerIds = jobsSnapshot.docs
@@ -52,6 +61,7 @@ class EmployeeJobDiscoveryService {
         .toList();
     final employersFuture = _loadEmployers(employerIds);
 
+    final employeeProfile = await employeeProfileFuture;
     final appliedIds = await appliedIdsFuture;
     final dismissedIds = await dismissedIdsFuture;
     final employers = await employersFuture;
@@ -79,15 +89,9 @@ class EmployeeJobDiscoveryService {
         })
         .toList();
 
-    items.sort((a, b) {
-      final aTime = a.publishedAt ?? a.createdAt ?? a.updatedAt;
-      final bTime = b.publishedAt ?? b.createdAt ?? b.updatedAt;
-      return (bTime?.millisecondsSinceEpoch ?? 0).compareTo(
-        aTime?.millisecondsSinceEpoch ?? 0,
-      );
-    });
+    _sortByFreshness(items);
 
-    return items;
+    return _rankJobsSafely(employeeProfile: employeeProfile, jobs: items);
   }
 
   Future<Set<String>> loadSavedJobIds() async {
@@ -291,6 +295,209 @@ class EmployeeJobDiscoveryService {
         .map((doc) => _readString(doc.data()['jobId']))
         .whereType<String>()
         .toSet();
+  }
+
+  Future<Map<String, dynamic>> _loadEmployeeProfile(String employeeId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('employeeProfiles')
+          .doc(employeeId)
+          .get();
+      return {
+        ...(snapshot.data() ?? <String, dynamic>{}),
+        'employeeId': employeeId,
+      };
+    } catch (_) {
+      return <String, dynamic>{'employeeId': employeeId};
+    }
+  }
+
+  Future<List<EmployeeJobDiscoveryItem>> _rankJobsSafely({
+    required Map<String, dynamic> employeeProfile,
+    required List<EmployeeJobDiscoveryItem> jobs,
+  }) async {
+    if (jobs.length < 2) {
+      return jobs;
+    }
+
+    try {
+      final rankedMatches = _matchingService.rankJobsForEmployee(
+        employeeProfile: employeeProfile,
+        jobs: jobs,
+      );
+      final matchResults = {
+        for (final result in rankedMatches) result.jobId: result,
+      };
+      if (matchResults.isEmpty) {
+        return jobs;
+      }
+
+      final classicRankedJobs = [...jobs];
+      classicRankedJobs.sort((a, b) {
+        final aMatch = matchResults[a.id];
+        final bMatch = matchResults[b.id];
+        if (aMatch == null || bMatch == null) {
+          return _compareByFreshness(a, b);
+        }
+
+        final scoreComparison = bMatch.totalScore.compareTo(aMatch.totalScore);
+        if (scoreComparison != 0) {
+          return scoreComparison;
+        }
+
+        final aDistance = aMatch.distanceKm ?? double.infinity;
+        final bDistance = bMatch.distanceKm ?? double.infinity;
+        final distanceComparison = aDistance.compareTo(bDistance);
+        if (distanceComparison != 0) {
+          return distanceComparison;
+        }
+
+        return _compareByFreshness(a, b);
+      });
+
+      var aiRanking = const <AiRankedJob>[];
+      try {
+        final aiResult = await _aiRankingService.rankEmployeeJobs(
+          employeeProfile: employeeProfile,
+          jobs: classicRankedJobs.take(10).toList(),
+          matchResultsByJobId: matchResults,
+        );
+        aiRanking = aiResult.ranking;
+      } catch (_) {
+        // AI ranking is a feed signal only; classic matching remains the fallback.
+      }
+
+      return _balancedDiscoveryOrder(
+        employeeId: _readString(employeeProfile['employeeId']) ?? '',
+        jobs: jobs,
+        matchResultsByJobId: matchResults,
+        aiRanking: aiRanking,
+      );
+    } catch (_) {
+      return jobs;
+    }
+  }
+
+  List<EmployeeJobDiscoveryItem> _balancedDiscoveryOrder({
+    required String employeeId,
+    required List<EmployeeJobDiscoveryItem> jobs,
+    required Map<String, JobMatchResult> matchResultsByJobId,
+    required List<AiRankedJob> aiRanking,
+  }) {
+    final aiScoresByJobId = {
+      for (final rankedJob in aiRanking) rankedJob.jobId: rankedJob.aiScore,
+    };
+    final hasAiRanking = aiScoresByJobId.isNotEmpty;
+    final todayKey = _todayKey(DateTime.now());
+
+    final scoredJobs = jobs.map((job) {
+      final classicScore = matchResultsByJobId[job.id]?.totalScore ?? 0;
+      final aiScore = aiScoresByJobId[job.id];
+      final feedScore = _combineFeedScore(
+        classicScore: classicScore,
+        aiScore: aiScore,
+        hasAiRanking: hasAiRanking,
+        urgencyBoost: _urgencyBoost(job),
+        jitter: _deterministicJitter(
+          employeeId: employeeId,
+          dateKey: todayKey,
+          jobId: job.id,
+        ),
+      );
+      return (job: job, score: feedScore);
+    }).toList();
+
+    scoredJobs.sort((left, right) {
+      final scoreComparison = right.score.compareTo(left.score);
+      if (scoreComparison != 0) return scoreComparison;
+
+      final leftDistance =
+          matchResultsByJobId[left.job.id]?.distanceKm ?? double.infinity;
+      final rightDistance =
+          matchResultsByJobId[right.job.id]?.distanceKm ?? double.infinity;
+      final distanceComparison = leftDistance.compareTo(rightDistance);
+      if (distanceComparison != 0) return distanceComparison;
+
+      return _compareByFreshness(left.job, right.job);
+    });
+
+    return scoredJobs.map((item) => item.job).toList();
+  }
+
+  // Discovery is intentionally not a strict AI sort: classic match remains the
+  // base, AI nudges strong Top 10 jobs, urgency helps timely work surface, and
+  // deterministic jitter gives the feed daily variety without reshuffling builds.
+  double _combineFeedScore({
+    required double classicScore,
+    required int? aiScore,
+    required bool hasAiRanking,
+    required double urgencyBoost,
+    required double jitter,
+  }) {
+    if (!hasAiRanking || aiScore == null) {
+      return classicScore * 0.85 + urgencyBoost * 0.10 + jitter * 0.05;
+    }
+
+    return classicScore * 0.60 +
+        aiScore * 0.25 +
+        urgencyBoost * 0.10 +
+        jitter * 0.05;
+  }
+
+  double _urgencyBoost(EmployeeJobDiscoveryItem job) {
+    var boost = 0.0;
+    if (job.urgent || job.startAsSoonAsPossible) {
+      boost = 85.0;
+    }
+    if (job.isToday) {
+      boost = boost < 75.0 ? 75.0 : boost;
+    } else if (_isTomorrow(job.startDate)) {
+      boost = boost < 55.0 ? 55.0 : boost;
+    }
+    return boost;
+  }
+
+  double _deterministicJitter({
+    required String employeeId,
+    required String dateKey,
+    required String jobId,
+  }) {
+    final seed = '$employeeId|$dateKey|$jobId';
+    var hash = 0;
+    for (final codeUnit in seed.codeUnits) {
+      hash = (hash * 31 + codeUnit) & 0x7fffffff;
+    }
+    return (hash % 1000) / 10.0;
+  }
+
+  String _todayKey(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
+  bool _isTomorrow(DateTime? date) {
+    if (date == null) return false;
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    return date.year == tomorrow.year &&
+        date.month == tomorrow.month &&
+        date.day == tomorrow.day;
+  }
+
+  void _sortByFreshness(List<EmployeeJobDiscoveryItem> items) {
+    items.sort(_compareByFreshness);
+  }
+
+  int _compareByFreshness(
+    EmployeeJobDiscoveryItem a,
+    EmployeeJobDiscoveryItem b,
+  ) {
+    final aTime = a.publishedAt ?? a.createdAt ?? a.updatedAt;
+    final bTime = b.publishedAt ?? b.createdAt ?? b.updatedAt;
+    return (bTime?.millisecondsSinceEpoch ?? 0).compareTo(
+      aTime?.millisecondsSinceEpoch ?? 0,
+    );
   }
 
   Future<Map<String, EmployeeDiscoveryEmployer>> _loadEmployers(

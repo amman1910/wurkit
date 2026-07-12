@@ -17,6 +17,7 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
   final Map<String, Future<EmployerPreview?>> _employerPreviewCache = {};
   late final Stream<EmployeeHomeProfile?> _profileStream;
   late final Stream<List<EmployeeHomeJob>> _openJobsStream;
+  late Future<List<EmployeeHomeJob>> _recommendedJobsFuture;
 
   bool _isUpdatingAvailability = false;
   bool _isUpdatingLocation = false;
@@ -26,6 +27,7 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
     super.initState();
     _profileStream = _service.watchCurrentEmployeeProfile();
     _openJobsStream = _service.watchOpenJobs();
+    _recommendedJobsFuture = _service.loadRecommendedJobs();
   }
 
   Future<void> _updateAvailability(bool value) async {
@@ -36,6 +38,7 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
       if (!mounted) {
         return;
       }
+      setState(() => _recommendedJobsFuture = _service.loadRecommendedJobs());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -65,6 +68,7 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
       if (!mounted) {
         return;
       }
+      setState(() => _recommendedJobsFuture = _service.loadRecommendedJobs());
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Location enabled')));
@@ -156,6 +160,7 @@ class _EmployeeHomePageState extends State<EmployeeHomePage> {
                   _JobsHomeContent(
                     profile: profile,
                     jobsStream: _openJobsStream,
+                    recommendedJobsFuture: _recommendedJobsFuture,
                     employerPreviewFor: _employerPreviewFor,
                     onJobTap: _openJobDetails,
                   ),
@@ -441,12 +446,14 @@ class _JobsHomeContent extends StatelessWidget {
   const _JobsHomeContent({
     required this.profile,
     required this.jobsStream,
+    required this.recommendedJobsFuture,
     required this.employerPreviewFor,
     required this.onJobTap,
   });
 
   final EmployeeHomeProfile profile;
   final Stream<List<EmployeeHomeJob>> jobsStream;
+  final Future<List<EmployeeHomeJob>> recommendedJobsFuture;
   final Future<EmployerPreview?> Function(String employerId) employerPreviewFor;
   final ValueChanged<EmployeeHomeJob> onJobTap;
 
@@ -459,6 +466,7 @@ class _JobsHomeContent extends StatelessWidget {
           return _JobsContentScaffold(
             profile: profile,
             jobs: const [],
+            recommendedJobsFuture: recommendedJobsFuture,
             isLoading: true,
             employerPreviewFor: employerPreviewFor,
             onJobTap: onJobTap,
@@ -488,6 +496,7 @@ class _JobsHomeContent extends StatelessWidget {
         return _JobsContentScaffold(
           profile: profile,
           jobs: snapshot.data ?? const <EmployeeHomeJob>[],
+          recommendedJobsFuture: recommendedJobsFuture,
           isLoading: false,
           employerPreviewFor: employerPreviewFor,
           onJobTap: onJobTap,
@@ -501,6 +510,7 @@ class _JobsContentScaffold extends StatelessWidget {
   const _JobsContentScaffold({
     required this.profile,
     required this.jobs,
+    required this.recommendedJobsFuture,
     required this.isLoading,
     required this.employerPreviewFor,
     required this.onJobTap,
@@ -508,6 +518,7 @@ class _JobsContentScaffold extends StatelessWidget {
 
   final EmployeeHomeProfile profile;
   final List<EmployeeHomeJob> jobs;
+  final Future<List<EmployeeHomeJob>> recommendedJobsFuture;
   final bool isLoading;
   final Future<EmployerPreview?> Function(String employerId) employerPreviewFor;
   final ValueChanged<EmployeeHomeJob> onJobTap;
@@ -528,12 +539,20 @@ class _JobsContentScaffold extends StatelessWidget {
           openJobsCount: jobs.length,
         ),
         const SizedBox(height: AppSpacing.section + 8),
-        _RecommendedJobsSection(
-          jobs: jobs,
-          isLoading: isLoading,
-          distanceFor: (job) => distances[job.id],
-          employerPreviewFor: employerPreviewFor,
-          onJobTap: onJobTap,
+        FutureBuilder<List<EmployeeHomeJob>>(
+          future: recommendedJobsFuture,
+          builder: (context, snapshot) {
+            final recommendedJobs = snapshot.data ?? const <EmployeeHomeJob>[];
+            return _RecommendedJobsSection(
+              jobs: recommendedJobs,
+              isLoading:
+                  isLoading ||
+                  snapshot.connectionState == ConnectionState.waiting,
+              distanceFor: (job) => _distanceTo(job),
+              employerPreviewFor: employerPreviewFor,
+              onJobTap: onJobTap,
+            );
+          },
         ),
         const SizedBox(height: AppSpacing.section + 8),
         _RecommendedJobsSection(
