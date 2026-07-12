@@ -261,18 +261,23 @@ class _HiringSnapshot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final cardExtent = 128.0 + ((textScale - 1).clamp(0.0, 1.2) * 24);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionTitle('Hiring Overview'),
         const SizedBox(height: 10),
-        GridView.count(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+        GridView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.48,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            mainAxisExtent: cardExtent,
+          ),
           children: [
             _StatCard(
               label: 'Active Jobs',
@@ -323,6 +328,8 @@ class _StatCard extends StatelessWidget {
     return _DashboardCard(
       padding: const EdgeInsets.all(12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
@@ -334,7 +341,7 @@ class _StatCard extends StatelessWidget {
             ),
             child: Icon(icon, color: accent, size: 19),
           ),
-          const Spacer(),
+          const SizedBox(height: 8),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
             child: Text(
@@ -347,13 +354,15 @@ class _StatCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 3),
-          Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: AppTextStyles.label.copyWith(fontSize: 11.5),
+          const SizedBox(height: 4),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.label.copyWith(fontSize: 11.5),
+            ),
           ),
         ],
       ),
